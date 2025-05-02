@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { toast } from 'react-toastify';
-import { useAuth } from '@/components/AuthProvider'; // Import from where you place the AuthProvider
+import { useAuth } from '@/context/AuthProvider'; // Import from where you place the AuthProvider
 
 export default function Login() {
   const [email, setEmail] = useState('');
