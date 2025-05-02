@@ -42,3 +42,24 @@ export async function deleteMessage(messageId) {
     if (!res.ok) throw new Error(`Error deleting: ${res.statusText}`);
     return res.json();
 }
+
+export async function getConversations(userId) {
+    const msgs = await getAllMessages();
+    const contacts = new Set();
+    msgs.forEach(m => {
+        if (m.senderId === userId)    contacts.add(m.receiverId);
+        if (m.receiverId === userId)  contacts.add(m.senderId);
+    });
+    return Array.from(contacts);
+}
+
+export async function getMessagesBetween(userId, contactId) {
+    const msgs = await getAllMessages();
+    return msgs
+        .filter(m =>
+            (m.senderId === userId && m.receiverId === contactId) ||
+            (m.senderId === contactId && m.receiverId === userId)
+        )
+        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+}
+
