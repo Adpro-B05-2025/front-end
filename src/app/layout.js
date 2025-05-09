@@ -269,14 +269,25 @@ function NavBar() {
 function LayoutContent({ children }) {
   const pathname = usePathname();
   const { loading } = useAuth();
+  const [isMounted, setIsMounted] = useState(false);
+  
+  // Set mounted state on client
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
   
   // Check if current path is auth related
   const isAuthPage = pathname?.includes('/login') || pathname?.includes('/register');
   
+  if (!isMounted) {
+    // Return minimal layout while not mounted to avoid hydration issues
+    return <div className="min-h-screen"></div>;
+  }
+  
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
-        <div className="loading-spinner"></div>
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
         <span className="ml-2">Loading...</span>
       </div>
     );
@@ -317,18 +328,33 @@ function LayoutContent({ children }) {
 }
 
 // Root Layout - Main export
-export default function RootLayout({ children }) {
+function RootLayout({ children }) {
+  // Use state to track client-side rendering
+  const [isMounted, setIsMounted] = useState(false);
+  
+  // Set mounted state on client side
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+  
   return (
     <html lang="en">
       <head>
         <link rel="icon" href="/favicon.ico" />
       </head>
       <body className={inter.className}>
-        <AuthProvider>
-          <ToastContainer position="top-right" autoClose={3000} />
-          <LayoutContent>{children}</LayoutContent>
-        </AuthProvider>
+        {isMounted ? (
+          <AuthProvider>
+            <ToastContainer position="top-right" autoClose={3000} />
+            <LayoutContent>{children}</LayoutContent>
+          </AuthProvider>
+        ) : (
+          // Simple placeholder during server rendering to avoid hydration issues
+          <div className="min-h-screen"></div>
+        )}
       </body>
     </html>
   );
 }
+
+export default RootLayout;

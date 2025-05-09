@@ -5,20 +5,28 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'react-toastify';
 import { api } from '@/utils/api';
 import { useAuth } from '@/context/AuthProvider';
-import { ACTIONS } from '@/utils/permissions';
 
 export default function Profile() {
     const router = useRouter();
-    const { user: authUser, refreshUser, hasPermission, logout } = useAuth();
+    const { user: authUser, refreshUser, logout } = useAuth();
     const [user, setUser] = useState(null);
     const [formData, setFormData] = useState({
         name: '',
+        email: '',
         address: '',
         phoneNumber: '',
         medicalHistory: '',
         speciality: '',
         workAddress: '',
     });
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+    const [error, setError] = useState(null);
+
+    // Track if email is about to change
+    const [initialEmail, setInitialEmail] = useState('');
+
     const SPECIALTIES = [
         'General Medicine',
         'Cardiology',
@@ -32,11 +40,7 @@ export default function Profile() {
         'Psychiatry',
         'Pulmonology',
         'Urology'
-      ];
-    const [isLoading, setIsLoading] = useState(true);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
-    const [error, setError] = useState(null);
+    ];
 
     useEffect(() => {
         // Function to check auth and fetch profile
@@ -66,13 +70,11 @@ export default function Profile() {
 
         try {
             console.log('Making API request to fetch profile data');
-            // Use direct API call instead of withPermissionCheck wrapper
             const response = await api.getProfile();
 
             if (!response.ok) {
                 console.error('Profile fetch failed with status:', response.status);
 
-                // Handle different error statuses
                 if (response.status === 401) {
                     console.log('Unauthorized response - logging out');
                     logout('Your session has expired. Please log in again.');
@@ -90,10 +92,12 @@ export default function Profile() {
             const profileData = await response.json();
             console.log('Profile data received:', profileData);
             setUser(profileData);
+            setInitialEmail(profileData.email || ''); // Store initial email
 
             // Set form data based on profile data
             setFormData({
                 name: profileData.name || '',
+                email: profileData.email || '',
                 address: profileData.address || '',
                 phoneNumber: profileData.phoneNumber || '',
                 medicalHistory: profileData.medicalHistory || '',
@@ -119,34 +123,71 @@ export default function Profile() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-
         setIsSubmitting(true);
         setError(null);
 
         try {
             console.log('Submitting profile update:', formData);
-            // Use direct API call
-            const response = await api.updateProfile(formData);
 
-            if (!response.ok) {
-                console.error('Profile update failed with status:', response.status);
+            // Check if email is being changed
+            const isEmailChanging = initialEmail !== formData.email;
+            console.log('Email changing:', isEmailChanging, 'from', initialEmail, 'to', formData.email);
 
-                // Handle different error statuses
-                if (response.status === 401) {
-                    toast.error('Your session has expired. Please log in again.');
-                    logout();
-                    return;
-                } else if (response.status === 403) {
-                    toast.error('You do not have permission to update this profile');
+            // If email is changing, show a confirmation dialog
+            if (isEmailChanging) {
+                const confirmed = window.confirm(
+                    'Changing your email will require you to log in again with your new email. Continue?'
+                );
+                if (!confirmed) {
+                    setIsSubmitting(false);
                     return;
                 }
+            }
 
+            // Make a custom fetch request instead of using api.updateProfile
+            const token = localStorage.getItem('token');
+            const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://ec2-13-219-192-16.compute-1.amazonaws.com:8081';
+
+            console.log('Using API base URL:', API_BASE_URL);
+
+            const response = await fetch(`${API_BASE_URL}/api/profile`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(formData),
+                credentials: 'omit',
+                mode: 'cors'
+            });
+
+            if (!response.ok) {
+                // Handle error responses...
                 const errorData = await response.json();
                 throw new Error(errorData.message || 'Failed to update profile');
             }
 
-            const updatedProfile = await response.json();
-            setUser(updatedProfile);
+            // Process response data
+            const data = await response.json();
+
+            // If email was changed, ALWAYS force logout
+            if (isEmailChanging) {
+                // Show success message
+                toast.success('Profile updated successfully! You will be logged out.');
+
+                // Store new email in sessionStorage for convenience
+                sessionStorage.setItem('pendingEmail', formData.email);
+
+                // Logout after a short delay
+                setTimeout(() => {
+                    logout('Your email has been updated. Please log in again with your new email.');
+                }, 1500);
+                return;
+            }
+
+            // If no email change, update the profile normally
+            setUser(data);
+            setInitialEmail(formData.email); // Update initial email state
 
             // Refresh user context
             refreshUser();
@@ -245,6 +286,73 @@ export default function Profile() {
     const canDelete = authUser?.id === user?.id;
     const canViewMedicalHistory = isPacillian ? (authUser?.id === user?.id) : true;
 
+    // Helper function to format day of week with proper styling
+    const formatDayOfWeek = (day) => {
+        const daysMap = {
+            'MONDAY': 'Monday',
+            'TUESDAY': 'Tuesday',
+            'WEDNESDAY': 'Wednesday',
+            'THURSDAY': 'Thursday',
+            'FRIDAY': 'Friday',
+            'SATURDAY': 'Saturday',
+            'SUNDAY': 'Sunday',
+            0: 'Sunday',
+            1: 'Monday',
+            2: 'Tuesday',
+            3: 'Wednesday',
+            4: 'Thursday',
+            5: 'Friday',
+            6: 'Saturday'
+        };
+
+        return daysMap[day] || String(day);
+    };
+
+    // Helper function to format time in 12-hour format
+    const formatTime = (timeString) => {
+        if (!timeString) return "N/A";
+
+        try {
+            // Handle ISO date strings like "2025-05-09T14:30:00"
+            if (typeof timeString === 'string' && timeString.includes('T')) {
+                const date = new Date(timeString);
+                if (!isNaN(date.getTime())) {
+                    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+                }
+            }
+
+            // Handle time-only strings like "14:30"
+            if (typeof timeString === 'string' && timeString.includes(':')) {
+                const [hours, minutes] = timeString.split(':').map(Number);
+
+                // Create a date object and set the hours and minutes
+                const date = new Date();
+                date.setHours(hours, minutes);
+
+                // Format as desired
+                return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+            }
+
+            // Handle Java LocalTime object format
+            if (typeof timeString === 'object' && timeString !== null) {
+                const hour = timeString.hour || 0;
+                const minute = timeString.minute || 0;
+
+                // Create a date object and set the hours and minutes
+                const date = new Date();
+                date.setHours(hour, minute);
+
+                // Format as desired
+                return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+            }
+
+            return timeString;
+        } catch (e) {
+            console.error("Error formatting time:", e, timeString);
+            return String(timeString);
+        }
+    };
+
     return (
         <div className="py-8">
             <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -310,6 +418,27 @@ export default function Profile() {
                                                 required
                                                 disabled={!canEdit}
                                             />
+                                        </div>
+
+                                        <div>
+                                            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                                                Email Address
+                                            </label>
+                                            <input
+                                                type="email"
+                                                name="email"
+                                                id="email"
+                                                value={formData.email}
+                                                onChange={handleChange}
+                                                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                                required
+                                                disabled={!canEdit}
+                                            />
+                                            {canEdit && (
+                                                <p className="mt-1 text-xs text-yellow-600">
+                                                    Note: Changing your email will require you to log in again.
+                                                </p>
+                                            )}
                                         </div>
 
                                         <div className="sm:col-span-2">
@@ -402,21 +531,25 @@ export default function Profile() {
                                                     Working Schedules
                                                 </label>
                                                 <div className="bg-gray-50 rounded-md p-3">
-                                                    <ul className="divide-y divide-gray-200">
+                                                    <ul className="space-y-2">
                                                         {user.workingSchedules.map((schedule, index) => (
-                                                            <li key={index} className="py-2 flex justify-between">
-                                                                <span className="text-sm font-medium">{schedule.dayOfWeek}</span>
-                                                                <span className="text-sm text-gray-600">
-                                                                    {new Date(schedule.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} -
-                                                                    {new Date(schedule.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                                </span>
-                                                                <span className={`text-xs px-2 py-1 rounded-full ${schedule.available ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                                                    {schedule.available ? 'Available' : 'Unavailable'}
-                                                                </span>
+                                                            <li key={index} className="py-2">
+                                                                <div className="flex flex-col">
+                                                                    <div className="flex items-center">
+                                                                        <span className="font-bold text-gray-800">{formatDayOfWeek(schedule.dayOfWeek)}:</span>
+                                                                        <span className="ml-2 text-gray-700">
+                                                                            {formatTime(schedule.startTime)} - {formatTime(schedule.endTime)}
+                                                                        </span>
+                                                                        <span className={`ml-3 text-xs px-2 py-1 rounded-full ${schedule.available ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                                                            }`}>
+                                                                            {schedule.available ? 'Available' : 'Unavailable'}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
                                                             </li>
                                                         ))}
                                                     </ul>
-                                                    <p className="mt-2 text-xs text-gray-500">
+                                                    <p className="mt-4 text-xs text-gray-500">
                                                         To update your schedule, please go to the Schedule Management page.
                                                     </p>
                                                 </div>
@@ -429,14 +562,6 @@ export default function Profile() {
                                 <div>
                                     <h3 className="text-lg font-medium text-gray-900 border-b pb-2">Account Information</h3>
                                     <div className="mt-4 grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700">Email Address</label>
-                                            <div className="mt-1 block w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-gray-500">
-                                                {user?.email}
-                                            </div>
-                                            <p className="mt-1 text-xs text-gray-500">Email cannot be changed</p>
-                                        </div>
-
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700">NIK (National ID)</label>
                                             <div className="mt-1 block w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-gray-500">
@@ -457,8 +582,8 @@ export default function Profile() {
                                                 type="button"
                                                 onClick={handleDeleteAccount}
                                                 className={`px-4 py-2 text-sm font-medium rounded-md ${isConfirmingDelete
-                                                        ? 'bg-red-600 text-white hover:bg-red-700'
-                                                        : 'border border-red-300 text-red-700 bg-white hover:bg-red-50'
+                                                    ? 'bg-red-600 text-white hover:bg-red-700'
+                                                    : 'border border-red-300 text-red-700 bg-white hover:bg-red-50'
                                                     }`}
                                             >
                                                 {isConfirmingDelete ? 'Confirm Delete Account' : 'Delete Account'}

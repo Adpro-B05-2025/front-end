@@ -23,6 +23,18 @@ const SPECIALTIES = [
   'Urology'
 ];
 
+// Days of the week
+const DAYS_OF_WEEK = [
+  'All Days',
+  'MONDAY',
+  'TUESDAY',
+  'WEDNESDAY',
+  'THURSDAY',
+  'FRIDAY',
+  'SATURDAY',
+  'SUNDAY'
+];
+
 export default function Doctors() {
   const router = useRouter();
   const [doctors, setDoctors] = useState([]);
@@ -30,9 +42,16 @@ export default function Doctors() {
   const [loading, setLoading] = useState(true);
   const [searchName, setSearchName] = useState('');
   const [searchSpeciality, setSearchSpeciality] = useState('All Specialties');
+  const [searchDay, setSearchDay] = useState('All Days');
+  const [searchTime, setSearchTime] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // Add this to track if component is mounted, to prevent hydration issues
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
+    // Mark component as mounted to avoid hydration issues
+    setIsMounted(true);
+    
     // Check if user is authenticated
     try {
       const token = localStorage.getItem('token');
@@ -82,6 +101,26 @@ export default function Doctors() {
         params.speciality = searchSpeciality;
       }
       
+      // Add day of week and time search
+      if (searchDay && searchDay !== 'All Days') {
+        params.dayOfWeek = searchDay;
+      }
+      
+      if (searchTime) {
+        // Format time as ISO time (HH:MM:SS)
+        try {
+          const timeObject = new Date(`2000-01-01T${searchTime}`);
+          const hours = timeObject.getHours().toString().padStart(2, '0');
+          const minutes = timeObject.getMinutes().toString().padStart(2, '0');
+          params.time = `${hours}:${minutes}:00`;
+        } catch (e) {
+          console.error('Error formatting time:', e);
+          // If there's an error, don't include the time parameter
+        }
+      }
+      
+      console.log('Search params:', params);
+      
       // If no search parameters, get all doctors
       if (Object.keys(params).length === 0) {
         fetchDoctors();
@@ -108,7 +147,9 @@ export default function Doctors() {
   const handleReset = () => {
     setSearchName('');
     setSearchSpeciality('All Specialties');
-    setFilteredDoctors(doctors);
+    setSearchDay('All Days');
+    setSearchTime('');
+    fetchDoctors();
   };
 
   const renderStarRating = (rating) => {
@@ -160,8 +201,9 @@ export default function Doctors() {
     return timeString; // Return as-is if parsing fails
   };
 
-  if (!isAuthenticated) {
-    return null; // Redirecting to login page
+  // Wait until component is mounted to render to avoid hydration issues
+  if (!isMounted || !isAuthenticated) {
+    return null; // Return nothing during server rendering or if not authenticated
   }
 
   return (
@@ -177,7 +219,8 @@ export default function Doctors() {
         {/* Search Filters */}
         <div className="bg-white shadow rounded-lg p-6 mb-8">
           <div className="grid grid-cols-1 gap-6 md:grid-cols-12">
-            <div className="md:col-span-5">
+            {/* Name search */}
+            <div className="md:col-span-3">
               <label htmlFor="searchName" className="block text-sm font-medium text-gray-700 mb-1">
                 Doctor Name
               </label>
@@ -191,7 +234,8 @@ export default function Doctors() {
               />
             </div>
             
-            <div className="md:col-span-5">
+            {/* Specialty search */}
+            <div className="md:col-span-3">
               <label htmlFor="searchSpeciality" className="block text-sm font-medium text-gray-700 mb-1">
                 Speciality
               </label>
@@ -209,6 +253,40 @@ export default function Doctors() {
               </select>
             </div>
             
+            {/* Day of week search */}
+            <div className="md:col-span-2">
+              <label htmlFor="searchDay" className="block text-sm font-medium text-gray-700 mb-1">
+                Available Day
+              </label>
+              <select
+                id="searchDay"
+                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                value={searchDay}
+                onChange={(e) => setSearchDay(e.target.value)}
+              >
+                {DAYS_OF_WEEK.map((day) => (
+                  <option key={day} value={day}>
+                    {day === 'All Days' ? day : day.charAt(0) + day.slice(1).toLowerCase()}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            {/* Time search */}
+            <div className="md:col-span-2">
+              <label htmlFor="searchTime" className="block text-sm font-medium text-gray-700 mb-1">
+                Available Time
+              </label>
+              <input
+                id="searchTime"
+                type="time"
+                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                value={searchTime}
+                onChange={(e) => setSearchTime(e.target.value)}
+              />
+            </div>
+            
+            {/* Search buttons */}
             <div className="md:col-span-2 flex items-end">
               <div className="flex space-x-2 w-full">
                 <button
@@ -234,7 +312,7 @@ export default function Doctors() {
         <div>
           {loading ? (
             <div className="flex justify-center items-center py-12">
-              <div className="loading-spinner"></div>
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
               <span className="ml-2">Loading doctors...</span>
             </div>
           ) : filteredDoctors.length === 0 ? (
@@ -258,7 +336,7 @@ export default function Doctors() {
                       </div>
                       <div className="ml-4">
                         <h3 className="text-lg font-medium text-white">{doctor.name}</h3>
-                        <p className="text-green-100 text-sm">{doctor.speciality}</p>
+                        <p className="text-green-100 text-sm">{doctor.speciality || 'General Practitioner'}</p>
                       </div>
                     </div>
                   </div>
@@ -278,16 +356,23 @@ export default function Doctors() {
                       <div className="mb-4">
                         <h4 className="text-sm font-medium text-gray-500 mb-1">Working Schedule</h4>
                         <div className="space-y-1 text-sm">
-                          {doctor.workingSchedules.slice(0, 3).map((schedule, index) => (
-                            <div key={index} className="flex justify-between">
-                              <span className="font-medium">{schedule.dayOfWeek}:</span>
-                              <span>
-                                {formatTime(schedule.startTime)} - {formatTime(schedule.endTime)}
-                              </span>
-                            </div>
-                          ))}
-                          {doctor.workingSchedules.length > 3 && (
-                            <p className="text-blue-600 text-right">+{doctor.workingSchedules.length - 3} more days</p>
+                          {doctor.workingSchedules
+                            .filter(schedule => schedule.isAvailable !== false) // Show all schedules unless explicitly marked unavailable
+                            .slice(0, 3)
+                            .map((schedule, index) => (
+                              <div key={index} className="flex justify-between">
+                                <span className="font-medium">
+                                  {schedule.dayOfWeek.charAt(0) + schedule.dayOfWeek.slice(1).toLowerCase()}:
+                                </span>
+                                <span>
+                                  {formatTime(schedule.startTime)} - {formatTime(schedule.endTime)}
+                                </span>
+                              </div>
+                            ))}
+                          {doctor.workingSchedules.filter(s => s.isAvailable !== false).length > 3 && (
+                            <p className="text-blue-600 text-right">
+                              +{doctor.workingSchedules.filter(s => s.isAvailable !== false).length - 3} more days
+                            </p>
                           )}
                         </div>
                       </div>

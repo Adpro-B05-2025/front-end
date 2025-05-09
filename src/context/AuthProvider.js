@@ -134,6 +134,7 @@ export function AuthProvider({ children }) {
             const updatedUserData = {
               ...user,
               name: profileData.name,
+              email: profileData.email, // Add this line to update email
               // Add other fields you want to keep in sync
             };
             localStorage.setItem('user', JSON.stringify(updatedUserData));

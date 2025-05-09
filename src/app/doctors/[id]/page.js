@@ -35,10 +35,11 @@ export default function DoctorDetail({ params }) {
       router.push('/doctors');
       return;
     }
-
+  
     setLoading(true);
     try {
-      const response = await api.getUserProfile(params.id);
+      // Change this line from getUserProfile to getCareGiverProfile
+      const response = await api.getCareGiverProfile(params.id);
       
       if (!response.ok) {
         throw new Error('Failed to fetch doctor details');
@@ -46,7 +47,8 @@ export default function DoctorDetail({ params }) {
       
       const data = await response.json();
       
-      // Ensure we're looking at a caregiver, not a pacillian
+      // You may not need this check anymore since the endpoint is specific to caregivers
+      // but keeping it for extra safety
       if (data.userType !== 'CAREGIVER') {
         toast.error('The requested profile is not a doctor');
         router.push('/doctors');
