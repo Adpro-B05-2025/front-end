@@ -1,4 +1,5 @@
-const API_BASE = '/api/chat/messages';
+import { API_BASE_URL } from './api';
+const API_BASE = `${API_BASE_URL}/api/chat/messages`;
 
 export async function sendMessage({ senderId, receiverId, content }) {
     const res = await fetch(API_BASE, {
@@ -47,8 +48,8 @@ export async function getConversations(userId) {
     const msgs = await getAllMessages();
     const contacts = new Set();
     msgs.forEach(m => {
-        if (m.senderId === userId)    contacts.add(m.receiverId);
-        if (m.receiverId === userId)  contacts.add(m.senderId);
+        if (m.senderId === userId) contacts.add(m.receiverId);
+        if (m.receiverId === userId) contacts.add(m.senderId);
     });
     return Array.from(contacts);
 }
@@ -63,3 +64,16 @@ export async function getMessagesBetween(userId, contactId) {
         .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 }
 
+// Tambahan untuk dummy seed message
+export async function seedDummyChat(userId) {
+    const otherUserId = userId === 10 ? 20 : 10; // Bisa kamu atur lebih fleksibel
+    const existingConversations = await getConversations(userId);
+
+    if (!existingConversations.includes(otherUserId)) {
+        await sendMessage({
+            senderId: userId,
+            receiverId: otherUserId,
+            content: "Hello from dummy seed!"
+        });
+    }
+}

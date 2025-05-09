@@ -4,7 +4,6 @@ import { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/utils/api';
 import { toast } from 'react-toastify';
-import { hasPermission } from '@/utils/permissions';
 
 // Create context
 const AuthContext = createContext();
@@ -113,11 +112,6 @@ export function AuthProvider({ children }) {
     router.push('/login');
   };
 
-  // Helper function to get user roles
-  const getUserRoles = () => {
-    return user?.roles || [];
-  };
-
   // Return the context provider
   return (
     <AuthContext.Provider value={{ 
@@ -142,13 +136,7 @@ export function AuthProvider({ children }) {
         } catch (error) {
           console.error('Error refreshing user data:', error);
         }
-      },
-      // Add these new properties
-      roles: getUserRoles(),
-      isCareGiver: getUserRoles().includes('ROLE_CAREGIVER'),
-      isPacillian: getUserRoles().includes('ROLE_PACILLIAN'),
-      // Add permission check
-      hasPermission: (action, resourceId = null) => hasPermission(user, action, resourceId)
+      }
     }}>
       {children}
     </AuthContext.Provider>
