@@ -2,73 +2,80 @@
  * Enhanced API utilities with improved error handling for CORS and authorization
  */
 
-// Get API base URL from environment variables, with fallback value
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://ec2-13-219-192-16.compute-1.amazonaws.com:8081';
+// Base URL for auth-profile service
+export const API_BASE_URL =
+    process.env.NEXT_PUBLIC_API_URL ||
+    'http://ec2-13-219-192-16.compute-1.amazonaws.com:8081';
+
+// Base URL for chat microservice
+export const CHAT_BASE_URL =
+    process.env.NEXT_PUBLIC_CHAT_API_URL ||
+    'http://localhost:8082';
 
 /**
  * Makes a request to the API with authentication if a token is available
- * 
- * @param {string} endpoint - The API endpoint (without the base URL)
+ *
+ * @param {string} endpoint - The API endpoint (path only, e.g. '/api/profile')
  * @param {Object} options - Fetch options (method, headers, body, etc.)
- * @returns {Promise} - Fetch promise
+ * @param {'auth'|'chat'} service - 'auth' uses API_BASE_URL, 'chat' uses CHAT_BASE_URL
+ * @returns {Promise<Response>}
  */
-export const apiRequest = async (endpoint, options = {}) => {
-  // Get stored auth token if available
+export const apiRequest = async (endpoint, options = {}, service = 'auth') => {
+  const base = service === 'chat' ? CHAT_BASE_URL : API_BASE_URL;
   let token = null;
   if (typeof window !== 'undefined') {
     token = localStorage.getItem('token');
-    console.log('Using token for request:', token ? `${token.substring(0, 15)}...` : 'No token found');
   }
 
-  // Prepare headers
   const headers = {
     'Content-Type': 'application/json',
     ...options.headers,
   };
-
-  // Add authorization header if token exists
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  // Log request details for debugging
-  console.log(`Request to: ${API_BASE_URL}${endpoint}`);
+  console.log(`Request to: ${base}${endpoint}`);
   console.log('Request method:', options.method || 'GET');
-  
+
   try {
-    // Make the request with proper CORS handling
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await fetch(`${base}${endpoint}`, {
       ...options,
       headers,
-      credentials: 'omit', // Changed from 'include' to 'omit'
       mode: 'cors',
+      credentials: 'omit',  // ensure no cookies are sent
     });
-    
     console.log(`Response status: ${response.status}`);
-    
-    // Handle authorization errors (401 and 403)
+
+    // Handle 401 & 403 centrally
     if (response.status === 401 || response.status === 403) {
-      console.log(`Authentication/Authorization failed (${response.status}) - handling error`);
-      
-      // Get the error details
-      const errorData = await response.json().catch(() => ({ 
-        message: response.status === 401 ? 'Session expired' : 'You are not authorized for this action'
-      }));
-      
-      // If token expired (401), clear token and redirect
+      console.log(`Auth failed (${response.status}) – handling`);
+      let errorData;
+      try {
+        errorData = await response.json();
+      } catch {
+        errorData = {
+          message:
+              response.status === 401
+                  ? 'Session expired, please log in again'
+                  : 'You are not authorized for this action',
+        };
+      }
+
+      // On 401, clear credentials and redirect to login
       if (response.status === 401 && typeof window !== 'undefined') {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         window.location.href = '/login';
       }
-      
-      // Return the error response
-      return new Response(JSON.stringify(errorData), { 
+
+      // Return a new Response so callers still get JSON
+      return new Response(JSON.stringify(errorData), {
         status: response.status,
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
       });
     }
-    
+
     return response;
   } catch (error) {
     console.error('API request failed:', error);
@@ -77,62 +84,62 @@ export const apiRequest = async (endpoint, options = {}) => {
 };
 
 /**
- * API endpoints
+ * API endpoints for auth-profile service
  */
 export const ENDPOINTS = {
-  // Auth endpoints
   LOGIN: '/api/auth/login',
   REGISTER_PACILLIAN: '/api/auth/register/pacillian',
   REGISTER_CAREGIVER: '/api/auth/register/caregiver',
-  
-  // Profile endpoints
   PROFILE: '/api/profile',
-  
-  // CareGiver endpoints
   ALL_CAREGIVERS: '/api/caregiver/all',
   SEARCH_CAREGIVERS: '/api/caregiver/search',
   GET_USER: (id) => `/api/user/${id}`,
 };
 
 /**
- * Helper methods for common API operations
+ * Helper methods for auth-profile
  */
 export const api = {
-  // Auth
-  login: (credentials) => apiRequest(ENDPOINTS.LOGIN, {
-    method: 'POST',
-    body: JSON.stringify(credentials),
-  }),
-  
-  registerPacillian: (data) => apiRequest(ENDPOINTS.REGISTER_PACILLIAN, {
-    method: 'POST',
-    body: JSON.stringify(data),
-  }),
-  
-  registerCareGiver: (data) => apiRequest(ENDPOINTS.REGISTER_CAREGIVER, {
-    method: 'POST',
-    body: JSON.stringify(data),
-  }),
-  
-  // Profile
-  getProfile: () => apiRequest(ENDPOINTS.PROFILE),
-  
-  updateProfile: (data) => apiRequest(ENDPOINTS.PROFILE, {
-    method: 'PUT',
-    body: JSON.stringify(data),
-  }),
-  
-  deleteAccount: () => apiRequest(ENDPOINTS.PROFILE, {
-    method: 'DELETE',
-  }),
-  
-  // CareGivers
-  getAllCareGivers: () => apiRequest(ENDPOINTS.ALL_CAREGIVERS),
-  
+  login: (credentials) =>
+      apiRequest(ENDPOINTS.LOGIN, {
+        method: 'POST',
+        body: JSON.stringify(credentials),
+      }, 'auth'),
+
+  registerPacillian: (data) =>
+      apiRequest(ENDPOINTS.REGISTER_PACILLIAN, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }, 'auth'),
+
+  registerCareGiver: (data) =>
+      apiRequest(ENDPOINTS.REGISTER_CAREGIVER, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }, 'auth'),
+
+  getProfile: () =>
+      apiRequest(ENDPOINTS.PROFILE, {}, 'auth'),
+
+  updateProfile: (data) =>
+      apiRequest(ENDPOINTS.PROFILE, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }, 'auth'),
+
+  deleteAccount: () =>
+      apiRequest(ENDPOINTS.PROFILE, {
+        method: 'DELETE',
+      }, 'auth'),
+
+  getAllCareGivers: () =>
+      apiRequest(ENDPOINTS.ALL_CAREGIVERS, {}, 'auth'),
+
   searchCareGivers: (params) => {
-    const queryString = new URLSearchParams(params).toString();
-    return apiRequest(`${ENDPOINTS.SEARCH_CAREGIVERS}?${queryString}`);
+    const qs = new URLSearchParams(params).toString();
+    return apiRequest(`${ENDPOINTS.SEARCH_CAREGIVERS}?${qs}`, {}, 'auth');
   },
-  
-  getUserProfile: (id) => apiRequest(ENDPOINTS.GET_USER(id)),
+
+  getUserProfile: (id) =>
+      apiRequest(ENDPOINTS.GET_USER(id), {}, 'auth'),
 };

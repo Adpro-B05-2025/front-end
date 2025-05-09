@@ -3,7 +3,8 @@
 
 import React from 'react';
 import ChatWindow from '../ChatWindow';
-import { useAuth } from '@/components/AuthProvider';
+import { useAuth } from '@/context/AuthProvider';
+import { redirect } from 'next/navigation';
 
 export default function ChatWithPage({ params }) {
     const { user } = useAuth();
