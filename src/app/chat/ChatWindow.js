@@ -78,14 +78,14 @@ export default function ChatWindow({ myId, contactId }) {
   };
 
   return (
-    <div className="flex flex-col flex-1 h-full overflow-hidden">
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b bg-white flex-shrink-0">
         <h2 className="font-bold text-lg">{contactId}</h2>
       </div>
 
       {/* Messages List */}
-      <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
+      <div className="flex-1 overflow-y-auto p-4 bg-gray-50 min h-0">
         {messages.map(msg => {
           const isMe = msg.senderId === myId;
           return (
