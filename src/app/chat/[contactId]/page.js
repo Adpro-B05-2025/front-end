@@ -1,5 +1,7 @@
+// src/app/chat/[contactId]/page.js
 'use client';
 
+import React from 'react';
 import ChatWindow from '../ChatWindow';
 import { useAuth } from '@/components/AuthProvider';
 
@@ -10,9 +12,8 @@ export default function ChatWithPage({ params }) {
     if (!user) return <p>Loading...</p>;
 
     return (
-        <ChatWindow
-            myId={user.id}
-            contactId={contactId}
-        />
+        <div className="h-screen">
+            <ChatWindow myId={user.id} contactId={contactId} />
+        </div>
     );
 }

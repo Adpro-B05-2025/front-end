@@ -18,35 +18,31 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        // Check if running in the browser
         if (typeof window !== 'undefined') {
           const token = localStorage.getItem('token');
           const userStr = localStorage.getItem('user');
-          
+
           if (token && userStr) {
             const userData = JSON.parse(userStr);
             setUser(userData);
             setIsAuthenticated(true);
-            
-            // Verify token is still valid by making a request to /api/profile
+
+            // OPTIONAL: validate real token by fetching profile
             try {
               const response = await api.getProfile();
               if (!response.ok) {
-                // Token is invalid or expired
                 handleLogout('Your session has expired. Please log in again.');
               } else {
-                // Update user data with latest profile info
                 const profileData = await response.json();
                 const updatedUserData = {
                   ...userData,
                   name: profileData.name,
-                  // Add any other fields you want to keep in sync
                 };
                 localStorage.setItem('user', JSON.stringify(updatedUserData));
                 setUser(updatedUserData);
               }
             } catch (error) {
-              console.error('Error verifying authentication:', error);
+              console.warn('Skipping auth check (probably dummy user):', error);
             }
           }
         }
@@ -60,7 +56,7 @@ export function AuthProvider({ children }) {
     initializeAuth();
   }, []);
 
-  // Login function
+  // Real login
   const login = async (email, password) => {
     setLoading(true);
     try {
@@ -68,22 +64,20 @@ export function AuthProvider({ children }) {
       const data = await response.json();
 
       if (response.ok) {
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('user', JSON.stringify({
+        const newUser = {
           id: data.id,
           email: data.email,
           roles: data.roles,
-          name: data.name
-        }));
+          name: data.name,
+        };
 
-        setUser({
-          id: data.id,
-          email: data.email,
-          roles: data.roles,
-          name: data.name
-        });
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(newUser));
+
+        setUser(newUser);
         setIsAuthenticated(true);
         toast.success('Login successful!');
+        router.push('/chat');
         return true;
       } else {
         toast.error(data.message || 'Invalid email or password');
@@ -98,52 +92,67 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Logout function
+  // Dummy login (for development/testing)
+  const loginAsDummy = (id, name) => {
+    const dummyUser = {
+      id,
+      name,
+      email: `${name.toLowerCase()}@dummy.com`,
+      roles: ['user'],
+    };
+    localStorage.setItem('token', 'dummy-token');
+    localStorage.setItem('user', JSON.stringify(dummyUser));
+    setUser(dummyUser);
+    setIsAuthenticated(true);
+    toast.success(`Logged in as ${name}`);
+    router.push('/chat');
+  };
+
+  // Logout
   const handleLogout = (message) => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setUser(null);
     setIsAuthenticated(false);
-    
-    if (message) {
-      toast.info(message);
-    }
-    
+    if (message) toast.info(message);
     router.push('/login');
   };
 
-  // Return the context provider
-  return (
-    <AuthContext.Provider value={{ 
-      user, 
-      loading, 
-      isAuthenticated,
-      login,
-      logout: handleLogout,
-      refreshUser: async () => {
-        try {
-          const response = await api.getProfile();
-          if (response.ok) {
-            const profileData = await response.json();
-            const updatedUserData = {
-              ...user,
-              name: profileData.name,
-              // Add other fields you want to keep in sync
-            };
-            localStorage.setItem('user', JSON.stringify(updatedUserData));
-            setUser(updatedUserData);
-          }
-        } catch (error) {
-          console.error('Error refreshing user data:', error);
-        }
+  // Manual user refresh (optional)
+  const refreshUser = async () => {
+    try {
+      const response = await api.getProfile();
+      if (response.ok) {
+        const profileData = await response.json();
+        const updatedUser = {
+          ...user,
+          name: profileData.name,
+        };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        setUser(updatedUser);
       }
-    }}>
-      {children}
-    </AuthContext.Provider>
+    } catch (error) {
+      console.error('Error refreshing user data:', error);
+    }
+  };
+
+  return (
+      <AuthContext.Provider value={{
+        user,
+        loading,
+        isAuthenticated,
+        login,
+        logout: handleLogout,
+        refreshUser,
+        loginAsDummy,
+        setUser, // optional, for full control
+      }}>
+        {children}
+      </AuthContext.Provider>
   );
 }
 
-// Custom hook to use the auth context
+// Custom hook
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
