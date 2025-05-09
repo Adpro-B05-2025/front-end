@@ -84,7 +84,7 @@ export default function ChatPage() {
 
   // Desktop view
   return (
-    <div className="flex h-screen min-h-0">
+    <div className="flex h-[calc(100vh-4rem-3.5rem)] min-h-0">
       {/* Sidebar */}
       <div className="w-1/4 border-r border-gray-300 overflow-y-auto min-h-0 p-4">
         <input
@@ -121,7 +121,7 @@ export default function ChatPage() {
           <ChatWindow myId={user.id} contactId={selected} />
         ) : (
           <div className="flex items-center justify-center h-full text-gray-500">
-            Pilih percakapan
+            Start a conversation by selecting a contact.
           </div>
         )}
       </div>
