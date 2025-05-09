@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import './globals.css';
-import { AuthProvider, useAuth } from '@/components/AuthProvider';
+import { AuthProvider, useAuth } from '@/context/AuthProvider';
 
 const inter = Inter({ subsets: ['latin'] });
 

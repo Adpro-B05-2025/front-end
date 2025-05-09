@@ -1,5 +1,5 @@
 /**
- * Enhanced API utilities with improved error handling for CORS
+ * Enhanced API utilities with improved error handling for CORS and authorization
  */
 
 // Get API base URL from environment variables, with fallback value
@@ -40,24 +40,33 @@ export const apiRequest = async (endpoint, options = {}) => {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       ...options,
       headers,
-      credentials: 'same-origin', // This can be 'include' if you need cookies
+      credentials: 'omit', // Changed from 'include' to 'omit'
       mode: 'cors',
     });
     
     console.log(`Response status: ${response.status}`);
     
-    // Handle token expiration
-    if (response.status === 401 && token) {
-      console.log('Authentication failed - clearing token');
-      if (typeof window !== 'undefined') {
+    // Handle authorization errors (401 and 403)
+    if (response.status === 401 || response.status === 403) {
+      console.log(`Authentication/Authorization failed (${response.status}) - handling error`);
+      
+      // Get the error details
+      const errorData = await response.json().catch(() => ({ 
+        message: response.status === 401 ? 'Session expired' : 'You are not authorized for this action'
+      }));
+      
+      // If token expired (401), clear token and redirect
+      if (response.status === 401 && typeof window !== 'undefined') {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         window.location.href = '/login';
-        return new Response(JSON.stringify({ message: 'Session expired. Please log in again.' }), { 
-          status: 401,
-          headers: { 'Content-Type': 'application/json' }
-        });
       }
+      
+      // Return the error response
+      return new Response(JSON.stringify(errorData), { 
+        status: response.status,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
     
     return response;
