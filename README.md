@@ -44,3 +44,20 @@ The architectural changes we've made address several potential failure points:
 **Conclusion**  
 Applying Risk Storming as a team-based analysis technique allowed us to proactively identify and address potential architectural weaknesses before they impacted users. The resulting architecture is more resilient, scalable, and provides a better user experience.  
 As our user base continues to grow, we plan to regularly revisit this analysis to address emerging risks and ensure our architecture continues to meet performance and security requirements.  
+
+### Individual Works  
+
+**Auth & Profile**  
+![alt text](public/readme/messageImage_1747403676488.jpg)   
+![alt text](public/readme/messageImage_1747403683901.jpg)    
+
+**Rating**  
+![alt text](public/readme/6.drawio.png)  
+![alt text](public/readme/7.drawio.png)  
+
+**Chat**  
+![alt text](public/readme/chat1.jpg)  
+
+**Consultation**  
+![alt text](public/readme/konsul1.jpg)  
+![alt text](public/readme/konsul2.jpg)
