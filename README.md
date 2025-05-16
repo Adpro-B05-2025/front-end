@@ -4,6 +4,10 @@ This is the frontend for PandaCare, an E-Health platform designed for Fasilkom U
 
 ## 🚀 Getting Started
 
+## Component Diagram
+![alt text](public/readme/component_diagram.png)  
+## Code Diagrams
+![alt text](public/readme/code_diagram.png)  
 ### Prerequisites
 
 - Node.js 16.x or later
