@@ -6,20 +6,29 @@ const WS_URL = process.env.NEXT_PUBLIC_CHAT_WS_URL || 'http://localhost:8082/ws-
 let stompClient = null;
 
 export function connectWS(onMessage, onOpen, onError) {
+    const token = localStorage.getItem('token');
     if (stompClient && stompClient.active) return;
 
     stompClient = new Client({
         webSocketFactory: () => new SockJS(WS_URL),
+
+        // tambahkan ini supaya setiap frame (SEND/SUBSCRIBE) bawa header Authorization
+        connectHeaders: {
+            Authorization: `Bearer ${token}`
+        },
+
         debug: str => console.log('[STOMP]', str),
         reconnectDelay: 5000,
+
         onConnect: frame => {
-            console.log('Connected:', frame);
+            console.log('✅ STOMP connected');
             if (onOpen) onOpen(frame);
             onMessage.subscribeTopics(stompClient);
         },
-        onStompError: err => {
-            console.error('STOMP error:', err);
-            if (onError) onError(err);
+
+        onStompError: frame => {
+            console.error('❌ STOMP error:', frame);
+            if (onError) onError(frame);
         }
     });
 

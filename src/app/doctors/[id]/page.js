@@ -1,51 +1,46 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { toast } from 'react-toastify';
 import { api } from '@/utils/api';
+import { toast } from 'react-toastify';
+import SockJS from 'sockjs-client';
+import { Client } from '@stomp/stompjs';
+import { useAuth } from '@/context/AuthProvider';
 
 export default function DoctorDetail({ params }) {
   const router = useRouter();
+  const { user } = useAuth();
   const [doctor, setDoctor] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('about');
+  const [stompClient, setStompClient] = useState(null);
+  const [connected, setConnected] = useState(false);
 
+  // 1) Fetch doctor profile on mount
   useEffect(() => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        toast.error('Please log in to access this page');
-        router.push('/login');
-        return;
-      }
-      fetchDoctorDetails();
-    } catch (error) {
-      console.error('Error checking authentication:', error);
+    const token = localStorage.getItem('token');
+    if (!token) {
+      toast.error('Please log in to access this page');
       router.push('/login');
-    }
-  }, [router]);
-
-  const fetchDoctorDetails = async () => {
-    if (!params?.id) {
-      toast.error('Doctor ID is missing');
-      router.push('/doctors');
       return;
     }
+    fetchDoctorDetails();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.id]);
 
+  async function fetchDoctorDetails() {
     setLoading(true);
     try {
       const response = await api.getUserProfile(params.id);
       if (!response.ok) throw new Error('Failed to fetch doctor details');
       const data = await response.json();
-
       if (data.userType !== 'CAREGIVER') {
         toast.error('The requested profile is not a doctor');
         router.push('/doctors');
         return;
       }
-
       setDoctor(data);
     } catch (error) {
       console.error('Error fetching doctor details:', error);
@@ -54,13 +49,69 @@ export default function DoctorDetail({ params }) {
     } finally {
       setLoading(false);
     }
+  }
+
+  // 2) Initialize STOMP once we have the doctor
+  useEffect(() => {
+    if (!doctor) return;
+
+    const client = new Client({
+      webSocketFactory: () => new SockJS('http://localhost:8082/ws-chat'),
+      debug: str => console.log('[STOMP]', str),
+      reconnectDelay: 5000,
+      onConnect: () => {
+        console.log('✅ STOMP connected');
+        setConnected(true);
+        client.subscribe(
+            `/topic/chat.init.${doctor.id}`,
+            msg => {
+              const roomId = JSON.parse(msg.body);
+              router.push(`/chat/${roomId}`);
+            }
+        );
+      },
+      onStompError: frame => {
+        console.error('❌ STOMP error:', frame);
+        setConnected(false);
+      },
+      onWebSocketClose: () => {
+        console.log('⚠️ WebSocket closed');
+        setConnected(false);
+      },
+    });
+
+    client.activate();
+    setStompClient(client);
+
+    return () => {
+      client.deactivate();
+      setConnected(false);
+    };
+  }, [doctor, router]);
+
+  // 3) Handler to request room creation / retrieval
+  const handleChat = () => {
+    if (!stompClient || !connected) {
+      toast.error('Chat server belum siap, silakan coba beberapa saat lagi.');
+      return;
+    }
+    console.log('📤 publishing init to /app/chat.init.' + doctor.id);
+    stompClient.publish({
+      destination: `/app/chat.init.${doctor.id}`,
+      body: ''
+    });
   };
 
+  // Only allow patients (ROLE_PACILLIAN) who are not the same as the doctor to chat
+  const canChat =
+      user?.roles?.includes('ROLE_PACILLIAN') &&
+      user.id !== doctor?.id;
+
+  // Utility: render star icons for rating
   const renderStarRating = (rating) => {
     if (!rating) return 'No ratings yet';
     const fullStars = Math.floor(rating);
     const hasHalfStar = rating % 1 >= 0.5;
-
     return (
         <div className="flex items-center">
           {[...Array(5)].map((_, i) => (
@@ -69,21 +120,30 @@ export default function DoctorDetail({ params }) {
                   className={`h-5 w-5 ${
                       i < fullStars
                           ? 'text-yellow-400'
-                          : i === fullStars && hasHalfStar
+                          : (i === fullStars && hasHalfStar)
                               ? 'text-yellow-300'
                               : 'text-gray-300'
                   }`}
                   fill="currentColor"
                   viewBox="0 0 20 20"
               >
-                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0
+                     00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8
+                     2.034a1 1 0 00-.364 1.118l1.07
+                     3.292c.3.921-.755 1.688-1.54
+                     1.118l-2.8-2.034a1 1 0 00-1.175
+                     0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1
+                     1 0 00-.364-1.118L2.98
+                     8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1
+                     0 00.951-.69l1.07-3.292z" />
               </svg>
           ))}
-          <span className="ml-1 text-gray-600">{rating.toFixed(1)}</span>
+          <span className="ml-1 text-sm text-gray-600">{rating.toFixed(1)}</span>
         </div>
     );
   };
 
+  // Utility: group schedules by day of week
   const groupSchedulesByDay = (schedules) => {
     if (!schedules || schedules.length === 0) return {};
     const days = ['MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY','SUNDAY'];
@@ -94,34 +154,22 @@ export default function DoctorDetail({ params }) {
     }, {});
   };
 
+  // Utility: format various time string formats to "HH:mm"
   const formatTimeString = (timeString) => {
     if (!timeString) return '';
-    if (/^\d{1,2}:\d{2}$/.test(timeString)) return timeString;
-    try {
-      let hours, minutes;
-      if (timeString.includes('[')) {
-        const parts = timeString.replace(/[\[\]]/g,'').split(',');
-        hours = parseInt(parts[0].trim());
-        minutes = parseInt(parts[1].trim());
-      } else {
-        const date = new Date(timeString);
-        if (!isNaN(date.getTime())) {
-          hours = date.getHours();
-          minutes = date.getMinutes();
-        } else {
-          const m = timeString.match(/(\d{1,2}):(\d{2})/);
-          if (m) {
-            hours = parseInt(m[1]);
-            minutes = parseInt(m[2]);
-          } else {
-            return timeString;
-          }
-        }
-      }
-      return `${hours.toString().padStart(2,'0')}:${minutes.toString().padStart(2,'0')}`;
-    } catch {
-      return timeString;
+    // ISO "HH:MM:SS"
+    const m = timeString.match(/^(\d{1,2}):(\d{2})/);
+    if (m) {
+      const h = m[1].padStart(2, '0');
+      const m2 = m[2];
+      return `${h}:${m2}`;
     }
+    // full Date
+    const d = new Date(timeString);
+    if (!isNaN(d.getTime())) {
+      return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+    }
+    return timeString;
   };
 
   if (loading) {
@@ -152,21 +200,12 @@ export default function DoctorDetail({ params }) {
   return (
       <div className="py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Back to list */}
+          {/* Back link */}
           <div className="mb-6">
             <Link href="/doctors" className="inline-flex items-center text-blue-600 hover:text-blue-800">
-              <svg
-                  className="h-5 w-5 mr-1"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-              >
-                <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                />
+              <svg className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0
+               0l7-7m-7 7h18" />
               </svg>
               Back to doctors list
             </Link>
@@ -174,55 +213,51 @@ export default function DoctorDetail({ params }) {
 
           {/* Profile Header */}
           <div className="bg-white shadow overflow-hidden rounded-lg">
-            <div className="bg-gradient-to-r from-green-600 to-green-800 px-6 py-8">
-              <div className="flex flex-col md:flex-row md:items-center">
-                <div className="flex-shrink-0 h-24 w-24 rounded-full bg-white flex items-center justify-center text-green-800 text-3xl font-bold">
-                  {doctor.name?.charAt(0).toUpperCase() ?? 'D'}
-                </div>
-                <div className="mt-4 md:mt-0 md:ml-6">
-                  <h1 className="text-3xl font-bold text-white">{doctor.name}</h1>
-                  <p className="text-green-100 text-lg">{doctor.speciality}</p>
-                  <div className="mt-2 flex items-center">
-                    <div className="bg-white bg-opacity-20 text-white px-3 py-1 rounded-full text-sm">
-                      {renderStarRating(doctor.averageRating)}
-                    </div>
+            <div className="bg-gradient-to-r from-green-600 to-green-800 px-6 py-8 flex flex-col md:flex-row md:items-center">
+              <div className="flex-shrink-0 h-24 w-24 rounded-full bg-white flex items-center justify-center text-green-800 text-3xl font-bold">
+                {doctor.name?.charAt(0).toUpperCase() ?? 'D'}
+              </div>
+              <div className="mt-4 md:mt-0 md:ml-6">
+                <h1 className="text-3xl font-bold text-white">{doctor.name}</h1>
+                <p className="text-green-100 text-lg">{doctor.speciality}</p>
+                <div className="mt-2 flex items-center">
+                  <div className="bg-white bg-opacity-20 text-white px-3 py-1 rounded-full">
+                    {renderStarRating(doctor.averageRating)}
                   </div>
                 </div>
-                <div className="mt-6 md:mt-0 md:ml-auto flex items-center space-x-3">
-                  <Link
-                      href={`/consultations/new?doctorId=${doctor.id}`}
-                      className="inline-flex items-center px-6 py-3 text-white bg-blue-600 rounded-md hover:bg-blue-700"
-                  >
-                    Schedule Consultation
-                  </Link>
-                  {/* <-- CHAT BUTTON DI UPDATE JUGA DI SINI */}
-                  <Link
-                      href={`/chat?contactId=${doctor.id}`}
-                      className="inline-flex items-center px-6 py-3 text-white border border-white rounded-md hover:bg-white hover:bg-opacity-10"
-                  >
-                    <svg
-                        className="h-5 w-5 mr-2"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
+              </div>
+              <div className="mt-6 md:mt-0 md:ml-auto flex items-center space-x-3">
+                <Link
+                    href={`/consultations/new?doctorId=${doctor.id}`}
+                    className="inline-flex items-center px-6 py-3 text-white bg-blue-600 rounded-md hover:bg-blue-700"
+                >
+                  Schedule Consultation
+                </Link>
+                {canChat && (
+                    <button
+                        onClick={handleChat}
+                        className={`inline-flex items-center px-6 py-3 text-white border border-white rounded-md ${
+                            !connected
+                                ? 'opacity-50 cursor-not-allowed'
+                                : 'hover:bg-white hover:bg-opacity-10'
+                        }`}
                     >
-                      <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
-                      />
-                    </svg>
-                    Chat
-                  </Link>
-                </div>
+                      <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                              d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0
+                         01-2-2V6a2 2 0 00-2-2H5a2 2 0 012
+                         2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                      </svg>
+                      Chat
+                    </button>
+                )}
               </div>
             </div>
 
             {/* Tabs */}
             <div className="border-b border-gray-200">
               <nav className="flex -mb-px">
-                {['about','schedule','reviews'].map(tab => (
+                {['about', 'schedule', 'reviews'].map(tab => (
                     <button
                         key={tab}
                         onClick={() => setActiveTab(tab)}
@@ -238,7 +273,7 @@ export default function DoctorDetail({ params }) {
               </nav>
             </div>
 
-            {/* Content */}
+            {/* Tab Content */}
             <div className="px-6 py-6">
               {activeTab === 'about' && (
                   <div className="space-y-6">
@@ -256,6 +291,7 @@ export default function DoctorDetail({ params }) {
                         </div>
                       </div>
                     </div>
+
                     {/* Contact Info */}
                     <div>
                       <h2 className="text-lg font-medium text-gray-900">Contact Information</h2>
@@ -266,21 +302,21 @@ export default function DoctorDetail({ params }) {
                         </div>
                         <div>
                           <dt className="text-sm font-medium text-gray-500">Phone</dt>
-                          <dd className="mt-1 text-gray-900">{doctor.phoneNumber}</dd>
+                          <dd className="mt-1 text-gray-900">{doctor.phoneNumber || 'Not available'}</dd>
                         </div>
                       </div>
                     </div>
+
                     {/* Ratings */}
                     <div className="pt-6">
                       <div className="flex items-center justify-between">
                         <h2 className="text-lg font-medium text-gray-900">Ratings & Reviews</h2>
-                        <Link
-                            href="#"
-                            className="text-sm font-medium text-blue-600 hover:text-blue-500"
+                        <button
                             onClick={() => setActiveTab('reviews')}
+                            className="text-sm font-medium text-blue-600 hover:text-blue-500"
                         >
                           View all reviews
-                        </Link>
+                        </button>
                       </div>
                       <div className="mt-3 flex items-center">
                         <div className="flex-shrink-0 mr-4 text-center">
@@ -342,7 +378,7 @@ export default function DoctorDetail({ params }) {
                       </p>
                       <Link
                           href={`/consultations/new?doctorId=${doctor.id}`}
-                          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700"
                       >
                         Schedule Consultation
                       </Link>
@@ -382,7 +418,6 @@ export default function DoctorDetail({ params }) {
                         </div>
                       </div>
                     </div>
-
                     <div className="border-t border-gray-200 pt-6">
                       <div className="text-center py-8">
                         <svg
@@ -395,7 +430,9 @@ export default function DoctorDetail({ params }) {
                               strokeLinecap="round"
                               strokeLinejoin="round"
                               strokeWidth={1}
-                              d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+                              d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0
+                           01-2-2V6a2 2 0 00-2-2H5a2 2 0 012
+                           2v8a2 2 0 01-2 2h-5l-5 5v-5z"
                           />
                         </svg>
                         <h3 className="mt-2 text-lg font-medium text-gray-900">No reviews yet</h3>
