@@ -117,8 +117,7 @@ export const apiRequest = async (endpoint, options = {}) => {
 export const ENDPOINTS = {
   // Auth endpoints
   LOGIN: '/api/auth/login',
-  REGISTER_PACILLIAN: '/api/auth/register/pacillian',
-  REGISTER_CAREGIVER: '/api/auth/register/caregiver',
+  REGISTER: '/api/auth/register', // Single registration endpoint
   
   // Profile endpoints
   PROFILE: '/api/profile',
@@ -140,15 +139,35 @@ export const api = {
     body: JSON.stringify(credentials),
   }),
   
-  registerPacillian: (data) => apiRequest(ENDPOINTS.REGISTER_PACILLIAN, {
-    method: 'POST',
-    body: JSON.stringify(data),
-  }),
+  registerPacillian: (data) => {
+    // Add userType for backend to determine which subclass to use
+    const registrationData = {
+      ...data,
+      userType: 'PACILLIAN'
+    };
+    
+    console.log('Registering Pacillian with data:', registrationData);
+    
+    return apiRequest(ENDPOINTS.REGISTER, {
+      method: 'POST',
+      body: JSON.stringify(registrationData),
+    });
+  },
   
-  registerCareGiver: (data) => apiRequest(ENDPOINTS.REGISTER_CAREGIVER, {
-    method: 'POST',
-    body: JSON.stringify(data),
-  }),
+  registerCareGiver: (data) => {
+    // Add userType for backend to determine which subclass to use
+    const registrationData = {
+      ...data,
+      userType: 'CAREGIVER'
+    };
+    
+    console.log('Registering CareGiver with data:', registrationData);
+    
+    return apiRequest(ENDPOINTS.REGISTER, {
+      method: 'POST',
+      body: JSON.stringify(registrationData),
+    });
+  },
   
   // Profile
   getProfile: () => apiRequest(ENDPOINTS.PROFILE),
@@ -174,4 +193,3 @@ export const api = {
   
   getCareGiverProfile: (id) => apiRequest(ENDPOINTS.GET_CAREGIVER(id)),
 };
-
