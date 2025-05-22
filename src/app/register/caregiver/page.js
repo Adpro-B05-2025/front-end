@@ -7,28 +7,6 @@ import Image from 'next/image';
 import { toast } from 'react-toastify';
 import { api } from '@/utils/api';
 
-// Days of the week for schedule selection
-const DAYS_OF_WEEK = [
-  'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
-];
-
-// Common working hours
-const WORKING_HOURS = [
-  '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', 
-  '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'
-];
-
-// Map day names to DayOfWeek values expected by the backend
-const DAY_OF_WEEK_MAP = {
-  'Monday': 'MONDAY',
-  'Tuesday': 'TUESDAY',
-  'Wednesday': 'WEDNESDAY',
-  'Thursday': 'THURSDAY',
-  'Friday': 'FRIDAY',
-  'Saturday': 'SATURDAY',
-  'Sunday': 'SUNDAY'
-};
-
 // Medical specialties
 const SPECIALTIES = [
   'General Medicine',
@@ -56,14 +34,7 @@ export default function RegisterCareGiver() {
     nik: '',
     workAddress: '',
     phoneNumber: '',
-    speciality: '',
-    workingSchedules: []
-  });
-
-  const [scheduleForm, setScheduleForm] = useState({
-    day: 'Monday',
-    startTime: '09:00',
-    endTime: '17:00'
+    speciality: ''
   });
 
   // Check if already logged in
@@ -86,63 +57,6 @@ export default function RegisterCareGiver() {
     }));
   };
 
-  const handleScheduleChange = (e) => {
-    const { name, value } = e.target;
-    setScheduleForm(prevState => ({
-      ...prevState,
-      [name]: value
-    }));
-  };
-
-  const addWorkingSchedule = () => {
-    // Validate schedule
-    if (scheduleForm.startTime >= scheduleForm.endTime) {
-      toast.error('End time must be after start time');
-      return;
-    }
-
-    // Create schedule object with the information needed
-    const scheduleObject = {
-      day: scheduleForm.day,
-      startTime: scheduleForm.startTime,
-      endTime: scheduleForm.endTime
-    };
-    
-    // Check for duplicate
-    const isDuplicate = formData.workingSchedules.some(
-      schedule => 
-        schedule.day === scheduleObject.day && 
-        schedule.startTime === scheduleObject.startTime && 
-        schedule.endTime === scheduleObject.endTime
-    );
-    
-    if (isDuplicate) {
-      toast.error('This schedule already exists');
-      return;
-    }
-
-    setFormData(prevState => ({
-      ...prevState,
-      workingSchedules: [...prevState.workingSchedules, scheduleObject]
-    }));
-
-    // Reset form to default values
-    setScheduleForm({
-      day: 'Monday',
-      startTime: '09:00',
-      endTime: '17:00'
-    });
-
-    toast.success('Schedule added');
-  };
-
-  const removeSchedule = (index) => {
-    setFormData(prevState => ({
-      ...prevState,
-      workingSchedules: prevState.workingSchedules.filter((_, i) => i !== index)
-    }));
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -161,34 +75,23 @@ export default function RegisterCareGiver() {
       toast.error('Phone number must contain only digits!');
       return;
     }
-
-    if (formData.workingSchedules.length === 0) {
-      toast.error('Please add at least one working schedule!');
-      return;
-    }
     
     setIsLoading(true);
     
     try {
-      // Format the working schedules for the API
-      const formattedSchedules = formData.workingSchedules.map(schedule => ({
-        dayOfWeek: DAY_OF_WEEK_MAP[schedule.day],
-        startTime: schedule.startTime,
-        endTime: schedule.endTime
-      }));
-      
-      // Prepare data for API
+      // Prepare data for API - match the backend RegisterCareGiverRequest structure
       const apiData = {
         email: formData.email,
         password: formData.password,
         name: formData.name,
         nik: formData.nik,
-        address: formData.workAddress, // Note: API expects 'address' not 'workAddress'
+        address: formData.workAddress, // BaseRegisterRequest expects 'address'
         phoneNumber: formData.phoneNumber,
-        speciality: formData.speciality,
-        workAddress: formData.workAddress,
-        workingSchedules: formattedSchedules
+        speciality: formData.speciality, // RegisterCareGiverRequest specific field
+        workAddress: formData.workAddress // RegisterCareGiverRequest specific field
       };
+      
+      console.log('Submitting CareGiver registration data:', apiData);
       
       const response = await api.registerCareGiver(apiData);
       const data = await response.json();
@@ -378,106 +281,6 @@ export default function RegisterCareGiver() {
                     <option key={specialty} value={specialty}>{specialty}</option>
                   ))}
                 </select>
-              </div>
-              
-              {/* Working Schedules Section */}
-              <div className="md:col-span-2 border-t pt-4 mt-2">
-                <h3 className="font-medium text-gray-900 mb-3">Working Schedule *</h3>
-                <p className="text-sm text-gray-500 mb-4">
-                  Add your available working hours. You must add at least one schedule.
-                </p>
-                
-                <div className="bg-gray-50 p-4 rounded-lg mb-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {/* Day Selection */}
-                    <div>
-                      <label htmlFor="scheduleDay" className="block text-sm font-medium text-gray-700 mb-1">
-                        Day
-                      </label>
-                      <select
-                        id="scheduleDay"
-                        name="day"
-                        value={scheduleForm.day}
-                        onChange={handleScheduleChange}
-                        className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                      >
-                        {DAYS_OF_WEEK.map((day) => (
-                          <option key={day} value={day}>{day}</option>
-                        ))}
-                      </select>
-                    </div>
-                    
-                    {/* Start Time */}
-                    <div>
-                      <label htmlFor="scheduleStart" className="block text-sm font-medium text-gray-700 mb-1">
-                        Start Time
-                      </label>
-                      <select
-                        id="scheduleStart"
-                        name="startTime"
-                        value={scheduleForm.startTime}
-                        onChange={handleScheduleChange}
-                        className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                      >
-                        {WORKING_HOURS.map((time) => (
-                          <option key={`start-${time}`} value={time}>{time}</option>
-                        ))}
-                      </select>
-                    </div>
-                    
-                    {/* End Time */}
-                    <div>
-                      <label htmlFor="scheduleEnd" className="block text-sm font-medium text-gray-700 mb-1">
-                        End Time
-                      </label>
-                      <select
-                        id="scheduleEnd"
-                        name="endTime"
-                        value={scheduleForm.endTime}
-                        onChange={handleScheduleChange}
-                        className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                      >
-                        {WORKING_HOURS.map((time) => (
-                          <option key={`end-${time}`} value={time}>{time}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  
-                  <button
-                    type="button"
-                    onClick={addWorkingSchedule}
-                    className="w-full mt-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
-                  >
-                    Add Schedule
-                  </button>
-                </div>
-                
-                {/* Schedules List */}
-                {formData.workingSchedules.length > 0 && (
-                  <div className="mt-2">
-                    <h4 className="text-sm font-medium text-gray-700 mb-2">Added Schedules:</h4>
-                    <ul className="space-y-2">
-                      {formData.workingSchedules.map((schedule, index) => (
-                        <li 
-                          key={index} 
-                          className="flex justify-between items-center bg-green-50 p-3 rounded-lg"
-                        >
-                          <span className="text-sm text-gray-700">
-                            {schedule.day}, {schedule.startTime}-{schedule.endTime}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => removeSchedule(index)}
-                            className="text-red-600 hover:text-red-800"
-                          >
-                            Remove
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
               </div>
             </div>
             

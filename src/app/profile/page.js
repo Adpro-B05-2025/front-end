@@ -286,73 +286,6 @@ export default function Profile() {
     const canDelete = authUser?.id === user?.id;
     const canViewMedicalHistory = isPacillian ? (authUser?.id === user?.id) : true;
 
-    // Helper function to format day of week with proper styling
-    const formatDayOfWeek = (day) => {
-        const daysMap = {
-            'MONDAY': 'Monday',
-            'TUESDAY': 'Tuesday',
-            'WEDNESDAY': 'Wednesday',
-            'THURSDAY': 'Thursday',
-            'FRIDAY': 'Friday',
-            'SATURDAY': 'Saturday',
-            'SUNDAY': 'Sunday',
-            0: 'Sunday',
-            1: 'Monday',
-            2: 'Tuesday',
-            3: 'Wednesday',
-            4: 'Thursday',
-            5: 'Friday',
-            6: 'Saturday'
-        };
-
-        return daysMap[day] || String(day);
-    };
-
-    // Helper function to format time in 12-hour format
-    const formatTime = (timeString) => {
-        if (!timeString) return "N/A";
-
-        try {
-            // Handle ISO date strings like "2025-05-09T14:30:00"
-            if (typeof timeString === 'string' && timeString.includes('T')) {
-                const date = new Date(timeString);
-                if (!isNaN(date.getTime())) {
-                    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
-                }
-            }
-
-            // Handle time-only strings like "14:30"
-            if (typeof timeString === 'string' && timeString.includes(':')) {
-                const [hours, minutes] = timeString.split(':').map(Number);
-
-                // Create a date object and set the hours and minutes
-                const date = new Date();
-                date.setHours(hours, minutes);
-
-                // Format as desired
-                return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
-            }
-
-            // Handle Java LocalTime object format
-            if (typeof timeString === 'object' && timeString !== null) {
-                const hour = timeString.hour || 0;
-                const minute = timeString.minute || 0;
-
-                // Create a date object and set the hours and minutes
-                const date = new Date();
-                date.setHours(hour, minute);
-
-                // Format as desired
-                return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
-            }
-
-            return timeString;
-        } catch (e) {
-            console.error("Error formatting time:", e, timeString);
-            return String(timeString);
-        }
-    };
-
     return (
         <div className="py-8">
             <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -523,38 +456,6 @@ export default function Profile() {
                                                 />
                                             </div>
                                         </div>
-
-                                        {/* Working Schedules - Display Only */}
-                                        {user?.workingSchedules && user.workingSchedules.length > 0 && (
-                                            <div className="mt-6">
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Working Schedules
-                                                </label>
-                                                <div className="bg-gray-50 rounded-md p-3">
-                                                    <ul className="space-y-2">
-                                                        {user.workingSchedules.map((schedule, index) => (
-                                                            <li key={index} className="py-2">
-                                                                <div className="flex flex-col">
-                                                                    <div className="flex items-center">
-                                                                        <span className="font-bold text-gray-800">{formatDayOfWeek(schedule.dayOfWeek)}:</span>
-                                                                        <span className="ml-2 text-gray-700">
-                                                                            {formatTime(schedule.startTime)} - {formatTime(schedule.endTime)}
-                                                                        </span>
-                                                                        <span className={`ml-3 text-xs px-2 py-1 rounded-full ${schedule.available ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                                                                            }`}>
-                                                                            {schedule.available ? 'Available' : 'Unavailable'}
-                                                                        </span>
-                                                                    </div>
-                                                                </div>
-                                                            </li>
-                                                        ))}
-                                                    </ul>
-                                                    <p className="mt-4 text-xs text-gray-500">
-                                                        To update your schedule, please go to the Schedule Management page.
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        )}
                                     </div>
                                 )}
 
