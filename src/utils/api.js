@@ -125,6 +125,12 @@ export const ENDPOINTS = {
   // CareGiver endpoints
   ALL_CAREGIVERS: '/api/caregiver/all',
   SEARCH_CAREGIVERS: '/api/caregiver/search',
+  SEARCH_CAREGIVERS_OPTIMIZED: '/api/caregiver/search-optimized',
+  SEARCH_CAREGIVERS_PAGINATED: '/api/caregiver/search-paginated',
+  SEARCH_CAREGIVERS_ADVANCED: '/api/caregiver/search-advanced',
+  TOP_RATED_CAREGIVERS: '/api/caregiver/top-rated',
+  NAME_SUGGESTIONS: '/api/caregiver/suggestions/names',
+  SPECIALITY_SUGGESTIONS: '/api/caregiver/suggestions/specialities',
   GET_USER: (id) => `/api/user/${id}`,
   GET_CAREGIVER: (id) => `/api/caregiver/${id}`,
 };
@@ -181,7 +187,7 @@ export const api = {
     method: 'DELETE',
   }),
   
-  // CareGivers
+  // CareGivers - Original methods
   getAllCareGivers: () => apiRequest(ENDPOINTS.ALL_CAREGIVERS),
   
   searchCareGivers: (params) => {
@@ -189,6 +195,39 @@ export const api = {
     return apiRequest(`${ENDPOINTS.SEARCH_CAREGIVERS}?${queryString}`);
   },
   
+  // CareGivers - New Enhanced Search Methods
+  searchCareGiversOptimized: (params) => {
+    const queryString = new URLSearchParams(params).toString();
+    return apiRequest(`${ENDPOINTS.SEARCH_CAREGIVERS_OPTIMIZED}?${queryString}`);
+  },
+  
+  searchCareGiversPaginated: (params) => {
+    const queryString = new URLSearchParams(params).toString();
+    return apiRequest(`${ENDPOINTS.SEARCH_CAREGIVERS_PAGINATED}?${queryString}`);
+  },
+  
+  searchCareGiversAdvanced: (params) => {
+    const queryString = new URLSearchParams(params).toString();
+    return apiRequest(`${ENDPOINTS.SEARCH_CAREGIVERS_ADVANCED}?${queryString}`);
+  },
+  
+  getTopRatedCareGivers: (params) => {
+    const queryString = new URLSearchParams(params).toString();
+    return apiRequest(`${ENDPOINTS.TOP_RATED_CAREGIVERS}?${queryString}`);
+  },
+  
+  // Autocomplete suggestions
+  getNameSuggestions: (prefix) => {
+    const queryString = new URLSearchParams({ prefix }).toString();
+    return apiRequest(`${ENDPOINTS.NAME_SUGGESTIONS}?${queryString}`);
+  },
+  
+  getSpecialitySuggestions: (query) => {
+    const queryString = new URLSearchParams({ query }).toString();
+    return apiRequest(`${ENDPOINTS.SPECIALITY_SUGGESTIONS}?${queryString}`);
+  },
+  
+  // User profiles
   getUserProfile: (id) => apiRequest(ENDPOINTS.GET_USER(id)),
   
   getCareGiverProfile: (id) => apiRequest(ENDPOINTS.GET_CAREGIVER(id)),
