@@ -31,8 +31,13 @@ export default function Doctors() {
   const [searchName, setSearchName] = useState('');
   const [searchSpeciality, setSearchSpeciality] = useState('All Specialties');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // Add this to track if component is mounted, to prevent hydration issues
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
+    // Mark component as mounted to avoid hydration issues
+    setIsMounted(true);
+    
     // Check if user is authenticated
     try {
       const token = localStorage.getItem('token');
@@ -82,6 +87,8 @@ export default function Doctors() {
         params.speciality = searchSpeciality;
       }
       
+      console.log('Search params:', params);
+      
       // If no search parameters, get all doctors
       if (Object.keys(params).length === 0) {
         fetchDoctors();
@@ -108,7 +115,7 @@ export default function Doctors() {
   const handleReset = () => {
     setSearchName('');
     setSearchSpeciality('All Specialties');
-    setFilteredDoctors(doctors);
+    fetchDoctors();
   };
 
   const renderStarRating = (rating) => {
@@ -141,27 +148,9 @@ export default function Doctors() {
     );
   };
 
-  // Helper function to format time from API
-  const formatTime = (timeString) => {
-    if (!timeString) return "";
-    
-    // Handle ISO time strings like "HH:MM:SS"
-    const timeParts = timeString.split(':');
-    if (timeParts.length >= 2) {
-      const hours = parseInt(timeParts[0], 10);
-      const minutes = parseInt(timeParts[1], 10);
-      
-      // Format as 12-hour time
-      const period = hours >= 12 ? 'PM' : 'AM';
-      const displayHours = hours % 12 || 12; // Convert 0 to 12 for 12 AM
-      return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
-    }
-    
-    return timeString; // Return as-is if parsing fails
-  };
-
-  if (!isAuthenticated) {
-    return null; // Redirecting to login page
+  // Wait until component is mounted to render to avoid hydration issues
+  if (!isMounted || !isAuthenticated) {
+    return null; // Return nothing during server rendering or if not authenticated
   }
 
   return (
@@ -177,6 +166,7 @@ export default function Doctors() {
         {/* Search Filters */}
         <div className="bg-white shadow rounded-lg p-6 mb-8">
           <div className="grid grid-cols-1 gap-6 md:grid-cols-12">
+            {/* Name search */}
             <div className="md:col-span-5">
               <label htmlFor="searchName" className="block text-sm font-medium text-gray-700 mb-1">
                 Doctor Name
@@ -191,6 +181,7 @@ export default function Doctors() {
               />
             </div>
             
+            {/* Specialty search */}
             <div className="md:col-span-5">
               <label htmlFor="searchSpeciality" className="block text-sm font-medium text-gray-700 mb-1">
                 Speciality
@@ -209,6 +200,7 @@ export default function Doctors() {
               </select>
             </div>
             
+            {/* Search buttons */}
             <div className="md:col-span-2 flex items-end">
               <div className="flex space-x-2 w-full">
                 <button
@@ -234,7 +226,7 @@ export default function Doctors() {
         <div>
           {loading ? (
             <div className="flex justify-center items-center py-12">
-              <div className="loading-spinner"></div>
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
               <span className="ml-2">Loading doctors...</span>
             </div>
           ) : filteredDoctors.length === 0 ? (
@@ -258,7 +250,7 @@ export default function Doctors() {
                       </div>
                       <div className="ml-4">
                         <h3 className="text-lg font-medium text-white">{doctor.name}</h3>
-                        <p className="text-green-100 text-sm">{doctor.speciality}</p>
+                        <p className="text-green-100 text-sm">{doctor.speciality || 'General Practitioner'}</p>
                       </div>
                     </div>
                   </div>
@@ -273,25 +265,6 @@ export default function Doctors() {
                       <h4 className="text-sm font-medium text-gray-500 mb-1">Work Address</h4>
                       <p className="text-gray-700">{doctor.workAddress || 'Not specified'}</p>
                     </div>
-                    
-                    {doctor.workingSchedules && doctor.workingSchedules.length > 0 && (
-                      <div className="mb-4">
-                        <h4 className="text-sm font-medium text-gray-500 mb-1">Working Schedule</h4>
-                        <div className="space-y-1 text-sm">
-                          {doctor.workingSchedules.slice(0, 3).map((schedule, index) => (
-                            <div key={index} className="flex justify-between">
-                              <span className="font-medium">{schedule.dayOfWeek}:</span>
-                              <span>
-                                {formatTime(schedule.startTime)} - {formatTime(schedule.endTime)}
-                              </span>
-                            </div>
-                          ))}
-                          {doctor.workingSchedules.length > 3 && (
-                            <p className="text-blue-600 text-right">+{doctor.workingSchedules.length - 3} more days</p>
-                          )}
-                        </div>
-                      </div>
-                    )}
                     
                     <div className="mb-4">
                       <h4 className="text-sm font-medium text-gray-500 mb-1">Contact Information</h4>

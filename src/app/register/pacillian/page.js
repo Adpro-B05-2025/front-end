@@ -63,16 +63,18 @@ export default function RegisterPacillian() {
     setIsLoading(true);
     
     try {
-      // Prepare data for API
+      // Prepare data for API - match the backend RegisterPacillianRequest structure
       const apiData = {
         email: formData.email,
         password: formData.password,
         name: formData.name,
         nik: formData.nik,
-        address: formData.address,
+        address: formData.address, // BaseRegisterRequest field
         phoneNumber: formData.phoneNumber,
-        medicalHistory: formData.medicalHistory
+        medicalHistory: formData.medicalHistory // RegisterPacillianRequest specific field
       };
+      
+      console.log('Submitting Pacillian registration data:', apiData);
       
       const response = await api.registerPacillian(apiData);
       const data = await response.json();
@@ -95,7 +97,7 @@ export default function RegisterPacillian() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white py-12">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
             <div className="relative w-16 h-16">
@@ -115,8 +117,8 @@ export default function RegisterPacillian() {
         
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <h2 className="text-2xl font-semibold text-center text-gray-800 mb-8 flex items-center justify-center">
-            <span className="bg-blue-100 text-blue-800 p-2 rounded-full mr-2">🐼</span>
-            Register as Pacillian
+            <span className="bg-blue-100 text-blue-800 p-2 rounded-full mr-2">👤</span>
+            Register as Patient
           </h2>
           
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -168,7 +170,7 @@ export default function RegisterPacillian() {
                   onChange={handleChange}
                   className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   placeholder="••••••••"
-                  minLength="8"
+                  minLength="6"
                   required
                 />
               </div>
@@ -186,7 +188,7 @@ export default function RegisterPacillian() {
                   onChange={handleChange}
                   className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   placeholder="••••••••"
-                  minLength="8"
+                  minLength="6"
                   required
                 />
               </div>
@@ -239,7 +241,7 @@ export default function RegisterPacillian() {
                   value={formData.address}
                   onChange={handleChange}
                   className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  placeholder="Your complete address"
+                  placeholder="Your home address"
                   required
                 />
               </div>
@@ -252,12 +254,12 @@ export default function RegisterPacillian() {
                 <textarea
                   id="medicalHistory"
                   name="medicalHistory"
+                  rows={3}
                   value={formData.medicalHistory}
                   onChange={handleChange}
-                  rows="4"
                   className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  placeholder="Please enter any relevant medical history (allergies, chronic conditions, etc.)"
-                ></textarea>
+                  placeholder="List any allergies, chronic conditions, or other relevant medical information (optional)"
+                />
               </div>
             </div>
             

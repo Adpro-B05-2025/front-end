@@ -5,12 +5,13 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { toast } from 'react-toastify';
-import { useAuth } from '@/context/AuthProvider'; // Import from where you place the AuthProvider
+import { useAuth } from '@/context/AuthProvider';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isEmailResetFlow, setIsEmailResetFlow] = useState(false);
   const router = useRouter();
   const { login, isAuthenticated } = useAuth();
 
@@ -21,6 +22,23 @@ export default function Login() {
     }
   }, [isAuthenticated, router]);
 
+  // Check for pending email from email change flow
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const pendingEmail = sessionStorage.getItem('pendingEmail');
+      if (pendingEmail) {
+        // Pre-fill the email field
+        setEmail(pendingEmail);
+        // Flag that we're in email reset flow
+        setIsEmailResetFlow(true);
+        // Clear the stored email
+        sessionStorage.removeItem('pendingEmail');
+        // Show notification
+        toast.info('Please log in with your new email address');
+      }
+    }
+  }, []);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
@@ -29,6 +47,11 @@ export default function Login() {
       const success = await login(email, password);
       
       if (success) {
+        // If this was from an email change, show a different message
+        if (isEmailResetFlow) {
+          toast.success('Successfully logged in with your new email!');
+        }
+        
         setTimeout(() => {
           router.push('/dashboard');
         }, 1500);
@@ -63,6 +86,13 @@ export default function Login() {
         
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <h2 className="text-2xl font-semibold text-center text-gray-800 mb-6">Sign In</h2>
+          
+          {isEmailResetFlow && (
+            <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-sm">
+              <p className="font-medium">Email Address Updated</p>
+              <p>Your email address has been changed. Please sign in with your new email and existing password.</p>
+            </div>
+          )}
           
           <form onSubmit={handleSubmit}>
             <div className="mb-6">

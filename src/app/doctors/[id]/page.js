@@ -35,10 +35,11 @@ export default function DoctorDetail({ params }) {
       router.push('/doctors');
       return;
     }
-
+  
     setLoading(true);
     try {
-      const response = await api.getUserProfile(params.id);
+      // Change this line from getUserProfile to getCareGiverProfile
+      const response = await api.getCareGiverProfile(params.id);
       
       if (!response.ok) {
         throw new Error('Failed to fetch doctor details');
@@ -46,7 +47,8 @@ export default function DoctorDetail({ params }) {
       
       const data = await response.json();
       
-      // Ensure we're looking at a caregiver, not a pacillian
+      // You may not need this check anymore since the endpoint is specific to caregivers
+      // but keeping it for extra safety
       if (data.userType !== 'CAREGIVER') {
         toast.error('The requested profile is not a doctor');
         router.push('/doctors');
@@ -93,68 +95,6 @@ export default function DoctorDetail({ params }) {
     );
   };
 
-  // Group working schedules by day
-  const groupSchedulesByDay = (schedules) => {
-    if (!schedules || schedules.length === 0) return {};
-    
-    const days = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
-    const grouped = {};
-    
-    days.forEach(day => {
-      const daySchedules = schedules.filter(s => s.dayOfWeek === day);
-      if (daySchedules.length > 0) {
-        grouped[day] = daySchedules;
-      }
-    });
-    
-    return grouped;
-  };
-
-  // Format time string from backend (which might be in various formats)
-  const formatTimeString = (timeString) => {
-    if (!timeString) return '';
-    
-    // Check if it's already in HH:MM format
-    if (/^\d{1,2}:\d{2}$/.test(timeString)) {
-      return timeString;
-    }
-    
-    try {
-      // Try to parse various time formats
-      let hours, minutes;
-      
-      // If the timeString contains [HH, MM, SS]
-      if (timeString.includes('[')) {
-        const timeParts = timeString.replace(/[\[\]]/g, '').split(',');
-        hours = parseInt(timeParts[0].trim());
-        minutes = parseInt(timeParts[1].trim());
-      } 
-      // If it's an ISO string or similar
-      else {
-        const date = new Date(timeString);
-        if (!isNaN(date.getTime())) {
-          hours = date.getHours();
-          minutes = date.getMinutes();
-        } else {
-          // Try to extract hours and minutes directly if possible
-          const timeMatch = timeString.match(/(\d{1,2}):(\d{2})/);
-          if (timeMatch) {
-            hours = parseInt(timeMatch[1]);
-            minutes = parseInt(timeMatch[2]);
-          } else {
-            return timeString; // Return as is if we can't parse
-          }
-        }
-      }
-      
-      // Format hours and minutes with leading zeros
-      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-    } catch (error) {
-      console.error('Error formatting time:', error);
-      return timeString; // Return original if parsing fails
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
@@ -175,8 +115,6 @@ export default function DoctorDetail({ params }) {
       </div>
     );
   }
-
-  const groupedSchedules = groupSchedulesByDay(doctor.workingSchedules);
 
   return (
     <div className="py-8">
@@ -239,16 +177,6 @@ export default function DoctorDetail({ params }) {
                 }`}
               >
                 About
-              </button>
-              <button
-                onClick={() => setActiveTab('schedule')}
-                className={`py-4 px-6 text-center border-b-2 font-medium text-sm ${
-                  activeTab === 'schedule'
-                    ? 'border-green-500 text-green-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                Schedule
               </button>
               <button
                 onClick={() => setActiveTab('reviews')}
@@ -314,45 +242,11 @@ export default function DoctorDetail({ params }) {
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
 
-            {/* Schedule Tab */}
-            {activeTab === 'schedule' && (
-              <div>
-                <h2 className="text-lg font-medium text-gray-900 mb-4">Working Schedule</h2>
-                
-                {Object.keys(groupedSchedules).length === 0 ? (
-                  <div className="text-gray-500 py-4">No schedule information available.</div>
-                ) : (
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                      {Object.entries(groupedSchedules).map(([day, schedules]) => (
-                        <div key={day} className="bg-white rounded-md shadow p-4">
-                          <h3 className="font-medium text-gray-800">{day.charAt(0) + day.slice(1).toLowerCase()}</h3>
-                          <div className="mt-2 space-y-2">
-                            {schedules.map((schedule, index) => (
-                              <div key={index} className="flex justify-between items-center py-1 border-b border-gray-100">
-                                <div className="text-sm">
-                                  {formatTimeString(schedule.startTime)} - 
-                                  {formatTimeString(schedule.endTime)}
-                                </div>
-                                <span className={`text-xs px-2 py-1 rounded-full ${schedule.available ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                  {schedule.available ? 'Available' : 'Booked'}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
                 <div className="mt-6">
                   <h3 className="text-base font-medium text-gray-900 mb-2">Schedule a Consultation</h3>
                   <p className="text-gray-600 mb-4">
-                    Click the button below to schedule a consultation with Dr. {doctor.name} based on their availability.
+                    Click the button below to schedule a consultation with Dr. {doctor.name}.
                   </p>
                   <Link
                     href={`/consultations/new?doctorId=${doctor.id}`}

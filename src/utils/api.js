@@ -40,11 +40,15 @@ export const apiRequest = async (endpoint, options = {}) => {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       ...options,
       headers,
-      credentials: 'omit', // Changed from 'include' to 'omit'
+      credentials: 'omit', // Keep this as 'omit' as in the original code
       mode: 'cors',
     });
     
     console.log(`Response status: ${response.status}`);
+    
+    // Clone the response to extract the email change information
+    // We need to clone it because we'll be parsing the body later
+    const responseClone = response.clone();
     
     // Handle authorization errors (401 and 403)
     if (response.status === 401 || response.status === 403) {
@@ -69,6 +73,37 @@ export const apiRequest = async (endpoint, options = {}) => {
       });
     }
     
+    // Special handling for profile update to check for email changes
+    if (endpoint === ENDPOINTS.PROFILE && options.method === 'PUT' && response.ok) {
+      try {
+        const data = await responseClone.json();
+        
+        // Check if the response contains token update information
+        if (data && data.tokenUpdated === true && data.token) {
+          console.log('Email changed - updating token');
+          localStorage.setItem('token', data.token);
+          
+          // Update user email in localStorage if available
+          const userStr = localStorage.getItem('user');
+          if (userStr) {
+            try {
+              const user = JSON.parse(userStr);
+              if (data.profile && data.profile.email) {
+                user.email = data.profile.email;
+                localStorage.setItem('user', JSON.stringify(user));
+                console.log('Updated user email in localStorage');
+              }
+            } catch (e) {
+              console.error('Error updating user in localStorage:', e);
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Error processing profile update response:', e);
+        // Continue with the original response
+      }
+    }
+    
     return response;
   } catch (error) {
     console.error('API request failed:', error);
@@ -82,8 +117,7 @@ export const apiRequest = async (endpoint, options = {}) => {
 export const ENDPOINTS = {
   // Auth endpoints
   LOGIN: '/api/auth/login',
-  REGISTER_PACILLIAN: '/api/auth/register/pacillian',
-  REGISTER_CAREGIVER: '/api/auth/register/caregiver',
+  REGISTER: '/api/auth/register', // Single registration endpoint
   
   // Profile endpoints
   PROFILE: '/api/profile',
@@ -92,6 +126,7 @@ export const ENDPOINTS = {
   ALL_CAREGIVERS: '/api/caregiver/all',
   SEARCH_CAREGIVERS: '/api/caregiver/search',
   GET_USER: (id) => `/api/user/${id}`,
+  GET_CAREGIVER: (id) => `/api/caregiver/${id}`,
 };
 
 /**
@@ -104,15 +139,35 @@ export const api = {
     body: JSON.stringify(credentials),
   }),
   
-  registerPacillian: (data) => apiRequest(ENDPOINTS.REGISTER_PACILLIAN, {
-    method: 'POST',
-    body: JSON.stringify(data),
-  }),
+  registerPacillian: (data) => {
+    // Add userType for backend to determine which subclass to use
+    const registrationData = {
+      ...data,
+      userType: 'PACILLIAN'
+    };
+    
+    console.log('Registering Pacillian with data:', registrationData);
+    
+    return apiRequest(ENDPOINTS.REGISTER, {
+      method: 'POST',
+      body: JSON.stringify(registrationData),
+    });
+  },
   
-  registerCareGiver: (data) => apiRequest(ENDPOINTS.REGISTER_CAREGIVER, {
-    method: 'POST',
-    body: JSON.stringify(data),
-  }),
+  registerCareGiver: (data) => {
+    // Add userType for backend to determine which subclass to use
+    const registrationData = {
+      ...data,
+      userType: 'CAREGIVER'
+    };
+    
+    console.log('Registering CareGiver with data:', registrationData);
+    
+    return apiRequest(ENDPOINTS.REGISTER, {
+      method: 'POST',
+      body: JSON.stringify(registrationData),
+    });
+  },
   
   // Profile
   getProfile: () => apiRequest(ENDPOINTS.PROFILE),
@@ -135,4 +190,6 @@ export const api = {
   },
   
   getUserProfile: (id) => apiRequest(ENDPOINTS.GET_USER(id)),
+  
+  getCareGiverProfile: (id) => apiRequest(ENDPOINTS.GET_CAREGIVER(id)),
 };
