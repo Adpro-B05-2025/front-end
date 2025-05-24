@@ -280,7 +280,7 @@ export default function Doctors() {
                       View Full Profile
                     </Link>
                     <Link
-                      href={`/consultations/new?doctorId=${doctor.id}`}
+                      href={`/consultation/book?id=${doctor.id}`}
                       className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
                     >
                       Schedule Consultation
