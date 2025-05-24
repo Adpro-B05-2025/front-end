@@ -11,6 +11,7 @@ export default function DoctorDetail({ params }) {
   const [doctor, setDoctor] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('about');
+  const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
     // Check if user is authenticated
@@ -62,6 +63,33 @@ export default function DoctorDetail({ params }) {
       router.push('/doctors');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleScheduleConsultation = async () => {
+    if (!doctor?.id) return;
+    setIsGenerating(true);
+    try {
+      // Panggil API backend untuk generate consultation baru
+      const response = await api.createConsultation({ doctorId: doctor.id });
+      if (!response.ok) {
+        throw new Error('Failed to create consultation');
+      }
+      const data = await response.json();
+
+      // Asumsi response mengandung consultationId
+      const consultationId = data.id || data.consultationId;
+      if (!consultationId) {
+        throw new Error('Invalid consultation ID from server');
+      }
+
+      // Redirect ke halaman konsultasi baru
+      router.push(`/consultations/${consultationId}`);
+    } catch (error) {
+      console.error('Error scheduling consultation:', error);
+      toast.error('Failed to schedule consultation. Please try again.');
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -147,7 +175,7 @@ export default function DoctorDetail({ params }) {
               </div>
               <div className="mt-6 md:mt-0 md:ml-auto">
                 <Link
-                  href={`/consultations/new?doctorId=${doctor.id}`}
+                  href={`/consultation/book?id=${doctor.id}`}
                   className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 >
                   Schedule Consultation

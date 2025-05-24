@@ -59,7 +59,7 @@ function NavBar() {
                 Find Doctors
               </Link>
               
-              <Link href="/consultations"
+              <Link href="/consultation"
                 className={`${
                   pathname === '/consultations' 
                     ? 'border-blue-500 text-gray-900' 
