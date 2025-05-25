@@ -152,7 +152,7 @@ export default function Profile() {
 
             // Make a custom fetch request instead of using api.updateProfile
             const token = localStorage.getItem('token');
-            const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://ec2-13-219-192-16.compute-1.amazonaws.com:8081';
+            const API_BASE_URL = 'http://localhost:8081';
 
             console.log('Using API base URL:', API_BASE_URL);
 

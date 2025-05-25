@@ -27,6 +27,7 @@ const SPECIALTIES = [
   'Urology'
 ];
 
+
 export default function AdvancedDoctorSearch() {
   const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -152,6 +153,7 @@ export default function AdvancedDoctorSearch() {
     });
   };
 
+
   const handleSetSearchSpeciality = (value) => {
     startTransition(() => {
       setSearchSpeciality(value);
@@ -187,6 +189,7 @@ export default function AdvancedDoctorSearch() {
     startTransition(() => {
       resetAllFilters();
     });
+
   };
 
   const renderStarRating = (rating) => {
@@ -216,6 +219,9 @@ export default function AdvancedDoctorSearch() {
       </div>
     );
   };
+
+
+  // Wait until component is mounted to render to avoid hydration issues
 
   if (!isMounted || !isAuthenticated) {
     return null;
@@ -261,9 +267,11 @@ export default function AdvancedDoctorSearch() {
               />
             </div>
 
+
             {/* Speciality search */}
             <div className="md:col-span-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
+
                 Speciality
               </label>
               <select
@@ -279,8 +287,10 @@ export default function AdvancedDoctorSearch() {
               </select>
             </div>
 
+
             {/* Advanced Filters Toggle */}
             <div className="md:col-span-4 flex items-end">
+
               <div className="flex space-x-2 w-full">
                 <button
                   onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
@@ -478,6 +488,7 @@ export default function AdvancedDoctorSearch() {
                     onPageChange={handlePageChangeWithTransition}
                     className="justify-center"
                   />
+
                 </div>
               )}
             </>

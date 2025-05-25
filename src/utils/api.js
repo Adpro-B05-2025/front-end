@@ -2,8 +2,9 @@
  * Enhanced API utilities with improved error handling for CORS and authorization
  */
 
-// Get API base URL from environment variables, with fallback value
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://ec2-13-219-192-16.compute-1.amazonaws.com:8081';
+export const AUTH_BASE_URL = 'http://localhost:8081';
+export const RATING_BASE_URL = 'http://localhost:8083';
+export const CONSULTATION_BASE_URL = 'http://localhost:8084';
 
 /**
  * Makes a request to the API with authentication if a token is available
@@ -13,77 +14,73 @@ export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://ec2-13-21
  * @returns {Promise} - Fetch promise
  */
 export const apiRequest = async (endpoint, options = {}) => {
-  // Get stored auth token if available
   let token = null;
   if (typeof window !== 'undefined') {
     token = localStorage.getItem('token');
     console.log('Using token for request:', token ? `${token.substring(0, 15)}...` : 'No token found');
   }
 
-  // Prepare headers
   const headers = {
     'Content-Type': 'application/json',
     ...options.headers,
   };
 
-  // Add authorization header if token exists
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  // Log request details for debugging
-  console.log(`Request to: ${API_BASE_URL}${endpoint}`);
+  let baseUrl;
+  if (endpoint.startsWith('/api/auth') || endpoint.startsWith('/api/profile') || endpoint.startsWith('/api/user') || endpoint.startsWith('/api/caregiver')) {
+    baseUrl = AUTH_BASE_URL;
+  } else if (endpoint.startsWith('/api/rating')) {
+    baseUrl = RATING_BASE_URL;
+  } else if (endpoint.startsWith('/api/consultations')) {
+    baseUrl = CONSULTATION_BASE_URL;
+  } else {
+    throw new Error(`Unknown endpoint prefix: ${endpoint}`);
+  }
+
+  console.log(`Request to: ${baseUrl}${endpoint}`);
   console.log('Request method:', options.method || 'GET');
-  
+
   try {
-    // Make the request with proper CORS handling
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await fetch(`${baseUrl}${endpoint}`, {
       ...options,
       headers,
-      credentials: 'omit', // Keep this as 'omit' as in the original code
+      credentials: 'omit',
       mode: 'cors',
     });
-    
+
     console.log(`Response status: ${response.status}`);
-    
-    // Clone the response to extract the email change information
-    // We need to clone it because we'll be parsing the body later
+
     const responseClone = response.clone();
-    
-    // Handle authorization errors (401 and 403)
+
     if (response.status === 401 || response.status === 403) {
       console.log(`Authentication/Authorization failed (${response.status}) - handling error`);
-      
-      // Get the error details
-      const errorData = await response.json().catch(() => ({ 
+
+      const errorData = await response.json().catch(() => ({
         message: response.status === 401 ? 'Session expired' : 'You are not authorized for this action'
       }));
-      
-      // If token expired (401), clear token and redirect
+
       if (response.status === 401 && typeof window !== 'undefined') {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         window.location.href = '/login';
       }
-      
-      // Return the error response
-      return new Response(JSON.stringify(errorData), { 
+
+      return new Response(JSON.stringify(errorData), {
         status: response.status,
         headers: { 'Content-Type': 'application/json' }
       });
     }
-    
-    // Special handling for profile update to check for email changes
+
     if (endpoint === ENDPOINTS.PROFILE && options.method === 'PUT' && response.ok) {
       try {
         const data = await responseClone.json();
-        
-        // Check if the response contains token update information
         if (data && data.tokenUpdated === true && data.token) {
           console.log('Email changed - updating token');
           localStorage.setItem('token', data.token);
-          
-          // Update user email in localStorage if available
+
           const userStr = localStorage.getItem('user');
           if (userStr) {
             try {
@@ -100,10 +97,9 @@ export const apiRequest = async (endpoint, options = {}) => {
         }
       } catch (e) {
         console.error('Error processing profile update response:', e);
-        // Continue with the original response
       }
     }
-    
+
     return response;
   } catch (error) {
     console.error('API request failed:', error);
@@ -117,11 +113,13 @@ export const apiRequest = async (endpoint, options = {}) => {
 export const ENDPOINTS = {
   // Auth endpoints
   LOGIN: '/api/auth/login',
+
   REGISTER: '/api/auth/register', // Single registration endpoint
   
+
   // Profile endpoints
   PROFILE: '/api/profile',
-  
+
   // CareGiver endpoints
   ALL_CAREGIVERS: '/api/caregiver/all',
   SEARCH_CAREGIVERS: '/api/caregiver/search',
@@ -133,6 +131,15 @@ export const ENDPOINTS = {
   SPECIALITY_SUGGESTIONS: '/api/caregiver/suggestions/specialities',
   GET_USER: (id) => `/api/user/${id}`,
   GET_CAREGIVER: (id) => `/api/caregiver/${id}`,
+
+  // Rating endpoints
+  CREATE_RATING: '/api/rating',
+  GET_RATING_DETAIL: (id) => `/api/rating/${id}`,
+  UPDATE_RATING: (id) => `/api/rating/${id}`,
+  DELETE_RATING: (id) => `/api/rating/${id}`,
+  GET_DOCTOR_RATINGS: (doctorId) => `/api/rating/doctor/${doctorId}`,
+
+  CREATE_CONSULTATION: '/api/consultations',
 };
 
 /**
@@ -144,56 +151,65 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(credentials),
   }),
+
   
   registerPacillian: (data) => {
     // Add userType for backend to determine which subclass to use
+
     const registrationData = {
       ...data,
       userType: 'PACILLIAN'
     };
+
     
     console.log('Registering Pacillian with data:', registrationData);
     
+
     return apiRequest(ENDPOINTS.REGISTER, {
       method: 'POST',
       body: JSON.stringify(registrationData),
     });
   },
+
   
   registerCareGiver: (data) => {
     // Add userType for backend to determine which subclass to use
+
     const registrationData = {
       ...data,
       userType: 'CAREGIVER'
     };
+
     
     console.log('Registering CareGiver with data:', registrationData);
-    
+
     return apiRequest(ENDPOINTS.REGISTER, {
       method: 'POST',
       body: JSON.stringify(registrationData),
     });
   },
-  
+
   // Profile
   getProfile: () => apiRequest(ENDPOINTS.PROFILE),
-  
+
   updateProfile: (data) => apiRequest(ENDPOINTS.PROFILE, {
     method: 'PUT',
     body: JSON.stringify(data),
   }),
-  
+
   deleteAccount: () => apiRequest(ENDPOINTS.PROFILE, {
     method: 'DELETE',
   }),
+
   
-  // CareGivers - Original methods
+
   getAllCareGivers: () => apiRequest(ENDPOINTS.ALL_CAREGIVERS),
-  
+
   searchCareGivers: (params) => {
     const queryString = new URLSearchParams(params).toString();
     return apiRequest(`${ENDPOINTS.SEARCH_CAREGIVERS}?${queryString}`);
   },
+
   
   // CareGivers - New Enhanced Search Methods
   searchCareGiversOptimized: (params) => {
@@ -227,8 +243,45 @@ export const api = {
     return apiRequest(`${ENDPOINTS.SPECIALITY_SUGGESTIONS}?${queryString}`);
   },
   
-  // User profiles
+
   getUserProfile: (id) => apiRequest(ENDPOINTS.GET_USER(id)),
-  
+
   getCareGiverProfile: (id) => apiRequest(ENDPOINTS.GET_CAREGIVER(id)),
+
+
+  // Ratings
+  createRating: (data) => apiRequest(ENDPOINTS.CREATE_RATING, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+
+  getRatingDetail: (id) => apiRequest(ENDPOINTS.GET_RATING_DETAIL(id)),
+
+  updateRating: (id, data) => apiRequest(ENDPOINTS.UPDATE_RATING(id), {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
+
+  deleteRating: (id) => apiRequest(ENDPOINTS.DELETE_RATING(id), {
+    method: 'DELETE',
+  }),
+
+  getDoctorRatings: (doctorId) => apiRequest(ENDPOINTS.GET_DOCTOR_RATINGS(doctorId)),
+
+
+  // Consultations
+  createConsultation: (data) => apiRequest(ENDPOINTS.CREATE_CONSULTATION, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+
+  getConsultationDetail: (id) => apiRequest(`/api/consultations/${id}`),
+
+  updateConsultationStatus: (id, status) =>
+    apiRequest(`/api/consultations/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+  }),
+
 };
+

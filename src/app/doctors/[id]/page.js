@@ -11,22 +11,19 @@ export default function DoctorDetail({ params }) {
   const [doctor, setDoctor] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('about');
+  const [ratings, setRatings] = useState([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [averageRating, setAverageRating] = useState(null);
 
   useEffect(() => {
-    // Check if user is authenticated
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        toast.error('Please log in to access this page');
-        router.push('/login');
-        return;
-      }
-
-      fetchDoctorDetails();
-    } catch (error) {
-      console.error('Error checking authentication:', error);
+    // Check auth and fetch doctor details and ratings
+    const token = localStorage.getItem('token');
+    if (!token) {
+      toast.error('Please log in to access this page');
       router.push('/login');
+      return;
     }
+    fetchDoctorDetails();
   }, [router]);
 
   const fetchDoctorDetails = async () => {
@@ -35,27 +32,48 @@ export default function DoctorDetail({ params }) {
       router.push('/doctors');
       return;
     }
-  
     setLoading(true);
     try {
-      // Change this line from getUserProfile to getCareGiverProfile
-      const response = await api.getCareGiverProfile(params.id);
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch doctor details');
-      }
-      
+      const token = localStorage.getItem('token');
+      if (!token) throw new Error('No auth token found');
+
+      // Fetch caregiver profile with token
+      const response = await fetch(`http://localhost:8081/api/caregiver/${params.id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) throw new Error('Failed to fetch doctor details');
       const data = await response.json();
-      
-      // You may not need this check anymore since the endpoint is specific to caregivers
-      // but keeping it for extra safety
+
       if (data.userType !== 'CAREGIVER') {
         toast.error('The requested profile is not a doctor');
         router.push('/doctors');
         return;
       }
-      
       setDoctor(data);
+
+      // Fetch summary with token
+      const summaryRes = await fetch(`http://localhost:8081/api/caregiver/${params.id}/summary`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (summaryRes.ok) {
+        const summaryData = await summaryRes.json();
+        setAverageRating(summaryData.averageRating);
+      }
+
+      // Fetch ratings (if this API needs token too, add header)
+      const ratingsRes = await fetch(`http://localhost:8083/api/rating/doctor/${params.id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (ratingsRes.ok) {
+        const ratingsData = await ratingsRes.json();
+        setRatings(ratingsData.data || []);
+      }
     } catch (error) {
       console.error('Error fetching doctor details:', error);
       toast.error('Failed to load doctor details. Please try again.');
@@ -65,26 +83,42 @@ export default function DoctorDetail({ params }) {
     }
   };
 
+  const fetchDoctorRatings = async () => {
+    try {
+      const response = await fetch(`http://localhost:8083/api/rating/doctor/${params.id}`);
+      if (!response.ok) throw new Error('Failed to fetch ratings');
+      const result = await response.json();
+      setRatings(result.data || []);
+    } catch (error) {
+      console.error('Error fetching ratings:', error);
+    }
+  };
+
+  const fetchDoctorSummary = async () => {
+    const response = await fetch(`http://localhost:8081/api/caregiver/${params.id}/summary`);
+    if (!response.ok) throw new Error('Failed to fetch summary');
+    return response.json();
+  };
+
   const renderStarRating = (rating) => {
-    if (!rating) return 'No ratings yet';
-    
-    // Convert rating to stars
+    if (rating === null || rating === undefined) return 'No ratings yet';
+
     const fullStars = Math.floor(rating);
     const hasHalfStar = rating % 1 >= 0.5;
-    
+
     return (
       <div className="flex items-center">
         {[...Array(5)].map((_, i) => (
-          <svg 
-            key={i} 
+          <svg
+            key={i}
             className={`h-5 w-5 ${
-              i < fullStars 
-                ? 'text-yellow-400' 
-                : (i === fullStars && hasHalfStar) 
-                  ? 'text-yellow-300' 
-                  : 'text-gray-300'
+              i < fullStars
+                ? 'text-yellow-400'
+                : i === fullStars && hasHalfStar
+                ? 'text-yellow-300'
+                : 'text-gray-300'
             }`}
-            fill="currentColor" 
+            fill="currentColor"
             viewBox="0 0 20 20"
           >
             <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
@@ -141,13 +175,13 @@ export default function DoctorDetail({ params }) {
                 <p className="text-green-100 text-lg">{doctor.speciality}</p>
                 <div className="mt-2 flex items-center">
                   <div className="bg-white bg-opacity-20 text-white px-3 py-1 rounded-full text-sm">
-                    {renderStarRating(doctor.averageRating)}
+                    {renderStarRating(averageRating)}
                   </div>
                 </div>
               </div>
               <div className="mt-6 md:mt-0 md:ml-auto">
                 <Link
-                  href={`/consultations/new?doctorId=${doctor.id}`}
+                  href={`/consultation/book?id=${doctor.id}`}
                   className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 >
                   Schedule Consultation
@@ -227,13 +261,19 @@ export default function DoctorDetail({ params }) {
                 <div className="pt-6">
                   <div className="flex items-center justify-between">
                     <h2 className="text-lg font-medium text-gray-900">Ratings & Reviews</h2>
-                    <Link href="#" className="text-sm font-medium text-blue-600 hover:text-blue-500" onClick={() => setActiveTab('reviews')}>
+                    <Link
+                      href="#"
+                      className="text-sm font-medium text-blue-600 hover:text-blue-500"
+                      onClick={() => setActiveTab('reviews')}
+                    >
                       View all reviews
                     </Link>
                   </div>
                   <div className="mt-3 flex items-center">
                     <div className="flex-shrink-0 mr-4">
-                      <span className="text-5xl font-bold text-gray-900">{doctor.averageRating ? doctor.averageRating.toFixed(1) : '-'}</span>
+                      <span className="text-5xl font-bold text-gray-900">
+                        {averageRating ? averageRating.toFixed(1) : '-'}
+                      </span>
                       <span className="text-gray-500">/5</span>
                     </div>
                     <div>
@@ -254,62 +294,29 @@ export default function DoctorDetail({ params }) {
                   >
                     Schedule Consultation
                   </Link>
-                </div>
-              </div>
-            )}
 
-            {/* Reviews Tab */}
-            {activeTab === 'reviews' && (
-              <div>
-                <h2 className="text-lg font-medium text-gray-900 mb-4">Ratings & Reviews</h2>
-                
-                <div className="bg-gray-50 rounded-lg p-6 mb-6">
-                  <div className="flex flex-col sm:flex-row sm:items-center">
-                    <div className="flex-shrink-0 sm:mr-8 mb-4 sm:mb-0 text-center">
-                      <span className="text-5xl font-bold text-gray-900">{doctor.averageRating ? doctor.averageRating.toFixed(1) : '-'}</span>
-                      <div className="mt-1">{renderStarRating(doctor.averageRating)}</div>
-                    </div>
-                    <div className="flex-grow">
-                      <p className="text-gray-600 mb-2">
-                        Rating breakdown (from your past consultations):
-                      </p>
-                      <div className="space-y-2">
-                        {[5, 4, 3, 2, 1].map((rating) => (
-                          <div key={rating} className="flex items-center">
-                            <div className="w-20 text-sm text-gray-600">{rating} stars</div>
-                            <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-                              <div 
-                                className={`h-full rounded-full ${
-                                  rating >= 4 ? 'bg-green-500' : rating >= 3 ? 'bg-yellow-500' : 'bg-red-500'
-                                }`}
-                                style={{ width: '0%' }} // This would be dynamic in a real app
-                              />
-                            </div>
-                            <div className="w-12 text-right text-sm text-gray-600">0%</div>
-                          </div>
-                        ))}
+                </div>
+              )}
+              
+              {/* Reviews Tab */}
+              {activeTab === 'reviews' && (
+                <div className="space-y-6">
+                  {ratings.length === 0 && <p className="text-gray-600">No reviews yet.</p>}
+                  {ratings.map((review) => (
+                    <div key={review.id} className="bg-gray-50 p-4 rounded-lg shadow-sm">
+                      <div className="flex items-center mb-2">
+                        <span className="font-semibold text-gray-800">{review.reviewerName || 'Anonymous'}</span>
+                        <span className="ml-4 text-yellow-400">{renderStarRating(review.score)}</span>
+                        <span className="ml-auto text-sm text-gray-500">{new Date(review.createdAt).toLocaleDateString()}</span>
                       </div>
+                      <p className="text-gray-700">{review.comment}</p>
                     </div>
-                  </div>
+                  ))}
                 </div>
-                
-                {/* Reviews list would go here - placeholder content for now */}
-                <div className="border-t border-gray-200 pt-6">
-                  <div className="text-center py-8">
-                    <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                    </svg>
-                    <h3 className="mt-2 text-lg font-medium text-gray-900">No reviews yet</h3>
-                    <p className="mt-1 text-gray-500">
-                      This doctor doesn't have any reviews yet. After your consultation, you'll be able to rate your experience.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  );
+      );
 }
