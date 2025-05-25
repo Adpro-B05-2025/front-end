@@ -277,11 +277,24 @@ export default function DoctorDetail({ params }) {
                       <span className="text-gray-500">/5</span>
                     </div>
                     <div>
-                      {renderStarRating(averageRating)}
-                      <p className="mt-1 text-sm text-gray-600">{ratings.length} review(s)</p>
-                      </div>
+                      {renderStarRating(doctor.averageRating)}
+                      <p className="text-sm text-gray-500 mt-1">Based on patient reviews</p>
                     </div>
                   </div>
+                </div>
+
+                <div className="mt-6">
+                  <h3 className="text-base font-medium text-gray-900 mb-2">Schedule a Consultation</h3>
+                  <p className="text-gray-600 mb-4">
+                    Click the button below to schedule a consultation with Dr. {doctor.name}.
+                  </p>
+                  <Link
+                    href={`/consultations/new?doctorId=${doctor.id}`}
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                  >
+                    Schedule Consultation
+                  </Link>
+
                 </div>
               )}
               

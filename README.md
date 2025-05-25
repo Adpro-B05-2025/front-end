@@ -2,145 +2,64 @@
 
 This is the frontend for PandaCare, an E-Health platform designed for Fasilkom UI students and the university community. The application enables online medical consultations, appointment scheduling, and access to health information.
 
+=======
+## Module 9  
+**Context Diagram**  
+![alt text](public/readme/1.png)  
+
+**Container Diagram**    
+![alt text](public/readme/2.png)  
+
+**Deployment Diagram**    
+![alt text](public/readme/3.png)  
+
+**Future Context Diagram**  
+![alt text](public/readme/4.png)  
+
+**Future  Container Diagram**  
+![alt text](public/readme/5.png)  
+
+### Risk Analysis
+Our team applied the Risk Storming technique to evaluate potential architectural vulnerabilities in our PandaCare application as it scales. This collaborative approach helped identify critical risks that could impact performance, security, and user experience as our platform grows.   
+
+**Key Risks Identified**
+
+1. Real-time Communication Bottlenecks  
+Risk Assessment: The initial REST API communication between the frontend and Chat Backend Service would cause latency issues and poor user experience as message volume increases.  
+Solution: We've redesigned this connection to use WebSocket protocol instead of REST APIs. This change enables real-time bidirectional  communication, reducing latency and supporting instantaneous message delivery even under high load.  
+
+2. Communication Reliability and User Engagement  
+Risk Assessment: Users might miss important updates about consultations or account changes when not actively using the application.  
+Solution: We've introduced a dedicated Email Notification System that sends automated alerts for critical events such as:   
+- Account registration confirmation  
+- Consultation scheduling and changes  
+- Important system updates  
+- Appointment reminders  
+This ensures critical information reaches users even when they're offline.
+
+**Implementation Impact Analysis**  
+The architectural changes we've made address several potential failure points:
+- Improved Real-time Experience: WebSocket implementation provides the seamless, responsive chat experience users expect from modern healthcare communication platforms.  
+- Enhanced Reliability: Email notifications create a redundant communication channel, ensuring critical information reaches users through multiple pathways.  
+
+**Conclusion**  
+Applying Risk Storming as a team-based analysis technique allowed us to proactively identify and address potential architectural weaknesses before they impacted users. The resulting architecture is more resilient, scalable, and provides a better user experience.  
+As our user base continues to grow, we plan to regularly revisit this analysis to address emerging risks and ensure our architecture continues to meet performance and security requirements.  
+
 ### Individual Works  
 
-<<<<<<< HEAD
+**Auth & Profile**  
+![alt text](public/readme/messageImage_1747403676488.jpg)   
+![alt text](public/readme/messageImage_1747403683901.jpg)    
+
 **Rating**  
 ![alt text](public/readme/6.drawio.png)  
 ![alt text](public/readme/7.drawio.png)  
-=======
-## Component Diagram
-![alt text](public/readme/component_diagram.png)  
-## Code Diagrams
-![alt text](public/readme/code_diagram.png)  
-### Prerequisites
 
-- Node.js 16.x or later
-- npm or yarn
+**Chat**  
+![alt text](public/readme/chat1.jpg)  
 
-### Installation
+**Consultation**  
+![alt text](public/readme/konsul1.jpg)  
+![alt text](public/readme/konsul2.jpg)
 
-1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   cd pandacare-frontend
-   ```
-
-2. Install dependencies:
-   ```bash
-   npm install
-   # or
-   yarn install
-   ```
-
-3. Create a `.env.local` file in the root directory and add the following environment variables:
-   ```
-   NEXT_PUBLIC_API_URL=http://ec2-13-219-192-16.compute-1.amazonaws.com:8081
-   ```
-
-4. Start the development server:
-   ```bash
-   npm run dev
-   # or
-   yarn dev
-   ```
-
-5. Open [http://localhost:3000](http://localhost:3000) in your browser to see the application.
-
-## 📄 Project Structure
-
-- `/src` - Source code
-  - `/app` - Next.js App Router components
-    - `/login` - Login page
-    - `/register` - Registration pages
-      - `/pacillian` - Patient registration
-      - `/caregiver` - Doctor registration
-    - `/dashboard` - User dashboard
-    - `layout.js` - Root layout component
-    - `page.js` - Home page
-  - `/components` - Reusable React components (to be created)
-  - `/utils` - Utility functions (to be created)
-
-## 🧩 Features
-
-- **Authentication System**
-  - User registration (Pacillians and CareGivers)
-  - User login
-  - Protected routes
-
-- **Online Consultation**
-  - Search and view doctor profiles
-  - Schedule consultations
-  - Chat with doctors
-  - Rate and review doctors
-
-- **Profile Management**
-  - View and update personal information
-  - Manage consultation history
-  - View ratings and reviews
-
-## 📱 Interface
-
-- Clean, modern UI with responsive design
-- Tailwind CSS for styling
-- Separate themes for patients and healthcare providers
-- Interactive form validation
-- Toast notifications for user feedback
-
-## 🔒 Authentication Flow
-
-The application uses JWT (JSON Web Tokens) for authentication:
-
-1. User logs in with email and password
-2. Server validates credentials and returns a JWT token
-3. Token is stored in localStorage
-4. Token is included in the Authorization header for API requests
-5. Protected routes check for valid token before rendering
-
-## 🔄 API Integration
-
-The frontend connects to the backend API at `http://ec2-13-219-192-16.compute-1.amazonaws.com:8081/api/`.
-
-Key endpoints:
-- `/api/auth/login` - User authentication
-- `/api/auth/register/pacillian` - Patient registration
-- `/api/auth/register/caregiver` - Doctor registration
-- `/api/profile` - User profile management
-- `/api/caregiver/all` - List of doctors
-- `/api/caregiver/search` - Search doctors by name or specialty
-
-## 📝 Development Notes
-
-- Add placeholder images to the `/public` folder (especially logo.png and hero-image.jpg)
-- Complete implementation of remaining pages:
-  - Doctor listing and search
-  - Consultation management
-  - Chat interface
-  - Profile management
-- Consider adding state management like Redux or Zustand for larger application state
-
-## 🚢 Deployment
-
-Build the production application:
-```bash
-npm run build
-# or
-yarn build
-```
-
-Start the production server:
-```bash
-npm run start
-# or
-yarn start
-```
-
-## 🛠️ Tech Stack
-
-- **Framework**: Next.js 14 with App Router
-- **UI**: React 18
-- **Styling**: Tailwind CSS
-- **Authentication**: JWT
-- **Form Handling**: React Hooks
-- **Notifications**: React-Toastify
->>>>>>> 6270daa (Submitting Individual Diagram for Module 9)
