@@ -204,10 +204,10 @@ export default function AdvancedDoctorSearch() {
           <svg
             key={i}
             className={`h-4 w-4 ${i < fullStars
-                ? 'text-yellow-400'
-                : (i === fullStars && hasHalfStar)
-                  ? 'text-yellow-300'
-                  : 'text-gray-300'
+              ? 'text-yellow-400'
+              : (i === fullStars && hasHalfStar)
+                ? 'text-yellow-300'
+                : 'text-gray-300'
               }`}
             fill="currentColor"
             viewBox="0 0 20 20"
@@ -469,7 +469,7 @@ export default function AdvancedDoctorSearch() {
                         View Profile
                       </Link>
                       <Link
-                        href={`/consultations/new?doctorId=${doctor.id}`}
+                        href={`/consultation/book?id=${doctor.id}`}
                         className="flex-1 text-center px-3 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
                       >
                         Book Now

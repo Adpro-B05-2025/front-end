@@ -261,13 +261,12 @@ export default function DoctorDetail({ params }) {
                 <div className="pt-6">
                   <div className="flex items-center justify-between">
                     <h2 className="text-lg font-medium text-gray-900">Ratings & Reviews</h2>
-                    <Link
-                      href="#"
-                      className="text-sm font-medium text-blue-600 hover:text-blue-500"
+                    <button
                       onClick={() => setActiveTab('reviews')}
+                      className="text-sm font-medium text-blue-600 hover:text-blue-500"
                     >
                       View all reviews
-                    </Link>
+                    </button>
                   </div>
                   <div className="mt-3 flex items-center">
                     <div className="flex-shrink-0 mr-4">
@@ -277,7 +276,7 @@ export default function DoctorDetail({ params }) {
                       <span className="text-gray-500">/5</span>
                     </div>
                     <div>
-                      {renderStarRating(doctor.averageRating)}
+                      {renderStarRating(averageRating)}
                       <p className="text-sm text-gray-500 mt-1">Based on patient reviews</p>
                     </div>
                   </div>
@@ -294,29 +293,29 @@ export default function DoctorDetail({ params }) {
                   >
                     Schedule Consultation
                   </Link>
-
                 </div>
-              )}
+              </div>
+            )}
               
-              {/* Reviews Tab */}
-              {activeTab === 'reviews' && (
-                <div className="space-y-6">
-                  {ratings.length === 0 && <p className="text-gray-600">No reviews yet.</p>}
-                  {ratings.map((review) => (
-                    <div key={review.id} className="bg-gray-50 p-4 rounded-lg shadow-sm">
-                      <div className="flex items-center mb-2">
-                        <span className="font-semibold text-gray-800">{review.reviewerName || 'Anonymous'}</span>
-                        <span className="ml-4 text-yellow-400">{renderStarRating(review.score)}</span>
-                        <span className="ml-auto text-sm text-gray-500">{new Date(review.createdAt).toLocaleDateString()}</span>
-                      </div>
-                      <p className="text-gray-700">{review.comment}</p>
+            {/* Reviews Tab */}
+            {activeTab === 'reviews' && (
+              <div className="space-y-6">
+                {ratings.length === 0 && <p className="text-gray-600">No reviews yet.</p>}
+                {ratings.map((review) => (
+                  <div key={review.id} className="bg-gray-50 p-4 rounded-lg shadow-sm">
+                    <div className="flex items-center mb-2">
+                      <span className="font-semibold text-gray-800">{review.reviewerName || 'Anonymous'}</span>
+                      <div className="ml-4">{renderStarRating(review.score)}</div>
+                      <span className="ml-auto text-sm text-gray-500">{new Date(review.createdAt).toLocaleDateString()}</span>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                    <p className="text-gray-700">{review.comment}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
-      );
+    </div>
+  );
 }
