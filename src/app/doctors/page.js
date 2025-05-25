@@ -256,10 +256,10 @@ export default function Doctors() {
                   </div>
                   
                   <div className="px-6 py-4">
-                    <div className="flex justify-between items-center mb-2">
+                    {/* <div className="flex justify-between items-center mb-2">
                       <span className="text-sm font-medium text-gray-500">Rating</span>
                       {renderStarRating(doctor.averageRating)}
-                    </div>
+                    </div> */}
                     
                     <div className="mb-4">
                       <h4 className="text-sm font-medium text-gray-500 mb-1">Work Address</h4>

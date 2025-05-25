@@ -129,6 +129,7 @@ export const ENDPOINTS = {
   GET_RATING_DETAIL: (id) => `/api/rating/${id}`,
   UPDATE_RATING: (id) => `/api/rating/${id}`,
   DELETE_RATING: (id) => `/api/rating/${id}`,
+  GET_DOCTOR_RATINGS: (doctorId) => `/api/rating/doctor/${doctorId}`,
 
   CREATE_CONSULTATION: '/api/consultations',
 };
@@ -207,6 +208,9 @@ export const api = {
   deleteRating: (id) => apiRequest(ENDPOINTS.DELETE_RATING(id), {
     method: 'DELETE',
   }),
+
+  getDoctorRatings: (doctorId) => apiRequest(ENDPOINTS.GET_DOCTOR_RATINGS(doctorId)),
+
 
   // Consultations
   createConsultation: (data) => apiRequest(ENDPOINTS.CREATE_CONSULTATION, {
