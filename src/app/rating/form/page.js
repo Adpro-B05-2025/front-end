@@ -21,7 +21,7 @@ export default function RatingFormPage() {
     if (consultationId) {
       setLoadingConsultation(true);
       setError(null);
-      fetch(`http://localhost:8084/api/consultations/${consultationId}`)
+      fetch(`http://localhost:8084/api/consultation-pacillian/${consultationId}`)
         .then((res) => {
           if (!res.ok) throw new Error('Consultation not found');
           return res.json();

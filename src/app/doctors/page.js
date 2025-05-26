@@ -193,7 +193,7 @@ export default function AdvancedDoctorSearch() {
   };
 
   const renderStarRating = (rating) => {
-    if (!rating) return 'No ratings yet';
+    // if (!rating) return 'No ratings yet';
 
     const fullStars = Math.floor(rating);
     const hasHalfStar = rating % 1 >= 0.5;
@@ -442,10 +442,10 @@ export default function AdvancedDoctorSearch() {
                     {/* Doctor Details */}
                     <div className="px-4 py-4 space-y-3">
                       {/* Rating */}
-                      <div className="flex justify-between items-center">
+                      {/* <div className="flex justify-between items-center">
                         <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Rating</span>
                         {renderStarRating(doctor.averageRating)}
-                      </div>
+                      </div> */}
 
                       {/* Location */}
                       <div>

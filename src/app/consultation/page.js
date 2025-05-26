@@ -15,7 +15,7 @@ export default function ConsultationPage() {
   useEffect(() => {
     const fetchConsultations = async () => {
       try {
-        const res = await fetch('http://localhost:8084/api/consultations');
+        const res = await fetch('http://localhost:8084/api/consultation-pacillian');
         const data = await res.json();
         const myConsultations = data.filter((item) => item.patientId === user.id);
         setConsultations(myConsultations);

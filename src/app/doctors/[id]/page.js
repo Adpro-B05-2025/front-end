@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'react-toastify';
 import { api } from '@/utils/api';
+import { AuthProvider, useAuth } from '@/context/AuthProvider';
 
 export default function DoctorDetail({ params }) {
   const router = useRouter();
@@ -14,6 +15,7 @@ export default function DoctorDetail({ params }) {
   const [ratings, setRatings] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [averageRating, setAverageRating] = useState(null);
+  const { user, logout, isAuthenticated } = useAuth();
 
   useEffect(() => {
     // Check auth and fetch doctor details and ratings
@@ -83,28 +85,31 @@ export default function DoctorDetail({ params }) {
     }
   };
 
-  const fetchDoctorRatings = async () => {
-    try {
-      const response = await fetch(`http://localhost:8083/api/rating/doctor/${params.id}`);
-      if (!response.ok) throw new Error('Failed to fetch ratings');
-      const result = await response.json();
-      setRatings(result.data || []);
-    } catch (error) {
-      console.error('Error fetching ratings:', error);
-    }
+  const getRatingDistribution = () => {
+    const distribution = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+    if (ratings.length === 0) return distribution;
+
+    ratings.forEach(r => {
+      const score = Math.round(r.score);
+      if (distribution[score] !== undefined) {
+        distribution[score]++;
+      }
+    });
+
+    Object.keys(distribution).forEach(key => {
+      distribution[key] = (distribution[key] / ratings.length) * 100;
+    });
+
+    return distribution;
   };
 
-  const fetchDoctorSummary = async () => {
-    const response = await fetch(`http://localhost:8081/api/caregiver/${params.id}/summary`);
-    if (!response.ok) throw new Error('Failed to fetch summary');
-    return response.json();
-  };
 
   const renderStarRating = (rating) => {
     if (rating === null || rating === undefined) return 'No ratings yet';
 
     const fullStars = Math.floor(rating);
     const hasHalfStar = rating % 1 >= 0.5;
+    const ratingDistribution = getRatingDistribution();
 
     return (
       <div className="flex items-center">
@@ -180,12 +185,14 @@ export default function DoctorDetail({ params }) {
                 </div>
               </div>
               <div className="mt-6 md:mt-0 md:ml-auto">
-                <Link
-                  href={`/consultation/book?id=${doctor.id}`}
-                  className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  Schedule Consultation
-                </Link>
+                {user?.roles?.includes('ROLE_PACILLIAN') && (
+                  <Link
+                    href={`/consultation/book?id=${doctor.id}`}
+                    className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    Schedule Consultation
+                  </Link>
+                )}
                 <Link
                   href={`/chat/${doctor.id}`}
                   className="ml-3 inline-flex items-center px-6 py-3 border border-white text-base font-medium rounded-md text-white hover:bg-white hover:bg-opacity-10 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-white"
@@ -282,35 +289,75 @@ export default function DoctorDetail({ params }) {
                   </div>
                 </div>
 
-                <div className="mt-6">
-                  <h3 className="text-base font-medium text-gray-900 mb-2">Schedule a Consultation</h3>
-                  <p className="text-gray-600 mb-4">
-                    Click the button below to schedule a consultation with Dr. {doctor.name}.
-                  </p>
-                  <Link
-                    href={`/consultation/book?id=${doctor.id}`}
-                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-                  >
-                    Schedule Consultation
-                  </Link>
-                </div>
+                {user?.roles?.includes('ROLE_PACILLIAN') && (
+                  <div className="mt-6">
+                    <h3 className="text-base font-medium text-gray-900 mb-2">Schedule a Consultation</h3>
+                    <p className="text-gray-600 mb-4">
+                      Click the button below to schedule a consultation with Dr. {doctor.name}.
+                    </p>
+                    <Link
+                      href={`/consultation/book?id=${doctor.id}`}
+                      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                    >
+                      Schedule Consultation
+                    </Link>
+                  </div>
+                )}
               </div>
             )}
               
             {/* Reviews Tab */}
             {activeTab === 'reviews' && (
-              <div className="space-y-6">
-                {ratings.length === 0 && <p className="text-gray-600">No reviews yet.</p>}
-                {ratings.map((review) => (
-                  <div key={review.id} className="bg-gray-50 p-4 rounded-lg shadow-sm">
-                    <div className="flex items-center mb-2">
-                      <span className="font-semibold text-gray-800">{review.reviewerName || 'Anonymous'}</span>
-                      <div className="ml-4">{renderStarRating(review.score)}</div>
-                      <span className="ml-auto text-sm text-gray-500">{new Date(review.createdAt).toLocaleDateString()}</span>
+              <div>
+                <h2 className="text-lg font-medium text-gray-900 mb-4">Ratings & Reviews</h2>
+                
+                <div className="bg-gray-50 rounded-lg p-6 mb-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center">
+                    <div className="flex-shrink-0 sm:mr-8 mb-4 sm:mb-0 text-center">
+                      <span className="text-5xl font-bold text-gray-900">
+                        {doctor.averageRating ? doctor.averageRating.toFixed(1) : '-'}
+                      </span>
+                      <div className="mt-1">{renderStarRating(doctor.averageRating)}</div>
+                      <p className="text-sm text-gray-600 mt-2">{ratings.length} reviews</p>
                     </div>
-                    <p className="text-gray-700">{review.comment}</p>
+                    <div className="flex-grow">
+                      <p className="text-gray-600 mb-2">Rating breakdown:</p>
+                      <div className="space-y-2">
+                        {[5, 4, 3, 2, 1].map((star) => {
+                          const percent = getRatingDistribution()[star] || 0;
+                          return (
+                            <div key={star} className="flex items-center">
+                              <div className="w-20 text-sm text-gray-600">{star} stars</div>
+                              <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden mx-2">
+                                <div
+                                  className={`h-full rounded-full ${
+                                    star >= 4 ? 'bg-green-500' : star === 3 ? 'bg-yellow-500' : 'bg-red-500'
+                                  }`}
+                                  style={{ width: `${percent}%` }}
+                                />
+                              </div>
+                              <div className="w-12 text-right text-sm text-gray-600">{percent.toFixed(0)}%</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
-                ))}
+                </div>
+
+                <div className="space-y-6">
+                  {ratings.length === 0 && <p className="text-gray-600">No reviews yet.</p>}
+                  {ratings.map((review) => (
+                    <div key={review.id} className="bg-gray-50 p-4 rounded-lg shadow-sm">
+                      <div className="flex items-center mb-2">
+                        <span className="font-semibold text-gray-800">{<span>{`Pacillian ${review.userId}`}</span> || 'Anonymous'}</span>
+                        <div className="ml-4">{renderStarRating(review.score)}</div>
+                        <span className="ml-auto text-sm text-gray-500">{new Date(review.createdAt).toLocaleDateString()}</span>
+                      </div>
+                      <p className="text-gray-700">{review.comment}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

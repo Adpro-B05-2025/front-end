@@ -37,7 +37,7 @@ export const apiRequest = async (endpoint, options = {}) => {
     baseUrl = AUTH_BASE_URL;
   } else if (endpoint.startsWith('/api/rating')) {
     baseUrl = RATING_BASE_URL;
-  } else if (endpoint.startsWith('/api/consultations')) {
+  } else if (endpoint.startsWith('/api/consultation-pacillian')) {
     baseUrl = CONSULTATION_BASE_URL;
   } else if (endpoint.startsWith('/api/chat')) {
     baseUrl = CHAT_BASE_URL;
@@ -143,7 +143,7 @@ export const ENDPOINTS = {
   GET_DOCTOR_RATINGS: (doctorId) => `/api/rating/doctor/${doctorId}`,
 
   // Consultation endpoints
-  CREATE_CONSULTATION: '/api/consultations',
+  CREATE_CONSULTATION: '/api/consultation-pacillian',
 
   // Chat endpoints (if you need them)
   // CHAT_MESSAGES: '/api/chat/messages',
@@ -271,10 +271,10 @@ export const api = {
     body: JSON.stringify(data),
   }),
 
-  getConsultationDetail: (id) => apiRequest(`/api/consultations/${id}`),
+  getConsultationDetail: (id) => apiRequest(`/api/consultation-pacillian/${id}`),
 
   updateConsultationStatus: (id, status) =>
-    apiRequest(`/api/consultations/${id}`, {
+    apiRequest(`/api/consultation-pacillian/${id}`, {
       method: 'PUT',
       body: JSON.stringify({ status }),
     }),
