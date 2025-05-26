@@ -1,154 +1,200 @@
 'use client';
 
-import { useSearchParams, useRouter } from 'next/navigation';
-import { useState } from 'react';
-import { api } from '@/utils/api';
-import DatePicker from 'react-datepicker';
-import 'react-datepicker/dist/react-datepicker.css';
+import { useState, useEffect } from 'react';
+import { useAuth } from '@/context/AuthProvider';
+import { useRouter } from 'next/navigation';
 
-export default function ConsultationForm() {
-  const searchParams = useSearchParams();
+const API_BASE_URL = 'http://localhost:8084/api/consultations';
+
+export default function BookConsultationPage() {
+  const { user, isAuthenticated } = useAuth();
   const router = useRouter();
+  
+  const [doctors, setDoctors] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [selectedDoctor, setSelectedDoctor] = useState('');
+  const [scheduledTime, setScheduledTime] = useState('');
+  const [description, setDescription] = useState('');
+  const [availableSlots, setAvailableSlots] = useState([]);
 
-  const doctorId = searchParams.get('id');
-  const [scheduledAt, setScheduledAt] = useState(new Date());
-  const [meetingUrl, setMeetingUrl] = useState('');
-  const [note, setNote] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push('/login');
+      return;
+    }
+
+    // Fetch doctors list
+    const fetchDoctors = async () => {
+      try {
+        const res = await fetch('http://localhost:8080/api/doctors');
+        if (!res.ok) throw new Error('Failed to fetch doctors');
+        const data = await res.json();
+        setDoctors(Array.isArray(data) ? data : []);
+      } catch (error) {
+        console.error('Error fetching doctors:', error);
+        setError('Failed to load doctors. Please try again later.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDoctors();
+  }, [isAuthenticated, router]);
+
+  // Fetch available slots when doctor is selected
+  useEffect(() => {
+    if (!selectedDoctor) return;
+
+    const fetchAvailableSlots = async () => {
+      try {
+        const today = new Date();
+        const nextWeek = new Date();
+        nextWeek.setDate(today.getDate() + 7);
+
+        const res = await fetch(
+          `http://localhost:8080/api/doctors/${selectedDoctor}/schedule?from=${today.toISOString()}&to=${nextWeek.toISOString()}`
+        );
+        if (!res.ok) throw new Error('Failed to fetch schedule');
+        
+        const data = await res.json();
+        setAvailableSlots(Array.isArray(data) ? data : []);
+      } catch (error) {
+        console.error('Error fetching schedule:', error);
+        setError('Failed to load available slots. Please try again.');
+      }
+    };
+
+    fetchAvailableSlots();
+  }, [selectedDoctor]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsSubmitting(true);
-
-    const consultationPayload = {
-      doctorId: Number(doctorId),
-      scheduledAt: scheduledAt.toISOString(),
-      meetingUrl,
-      note,
-    };
+    setError(null);
 
     try {
-      const response = await api.createConsultation(consultationPayload);
-      if (response.ok) {
-        const data = await response.json();
-        const consultationId = data.id;
-        router.push(`/consultation/${consultationId}`);
-      } else {
-        const errorData = await response.json();
-        alert(errorData.message || 'Failed to create consultation');
+      const consultationData = {
+        patientId: user.id,
+        doctorId: parseInt(selectedDoctor),
+        scheduledTime: scheduledTime,
+        description: description
+      };
+
+      const res = await fetch(API_BASE_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(consultationData),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || 'Failed to book consultation');
       }
-    } catch (err) {
-      console.error(err);
-      alert('Error submitting consultation');
-    } finally {
-      setIsSubmitting(false);
+
+      router.push('/consultation');
+    } catch (error) {
+      console.error('Error booking consultation:', error);
+      setError('Failed to book consultation. Please try again.');
     }
   };
 
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-600 border-t-transparent"></div>
+        <span className="ml-2">Loading...</span>
+      </div>
+    );
+  }
+
   return (
     <div className="py-8">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="bg-white shadow rounded-lg overflow-hidden">
-          {/* Form Header */}
-          <div className="bg-gradient-to-r from-blue-600 to-blue-800 px-6 py-8">
-            <h1 className="text-2xl font-bold text-white">Book a Consultation</h1>
-            <p className="mt-2 text-blue-100">
-              Schedule your appointment with the doctor
-            </p>
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
+        <h1 className="text-2xl font-bold mb-6">Book a Consultation</h1>
+
+        {error && (
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md">
+            <p className="text-red-600">{error}</p>
           </div>
+        )}
 
-          {/* Consultation Form */}
-          <div className="p-6">
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Date & Time Picker */}
-              <div>
-                <h3 className="text-lg font-medium text-gray-900 border-b pb-2">
-                  Appointment Details
-                </h3>
-                <div className="mt-4">
-                  <label htmlFor="dateTime" className="block text-sm font-medium text-gray-700">
-                    Date & Time
-                  </label>
-                  <DatePicker
-                    id="dateTime"
-                    selected={scheduledAt}
-                    onChange={(date) => setScheduledAt(date)}
-                    showTimeSelect
-                    timeFormat="HH:mm"
-                    timeIntervals={15}
-                    dateFormat="MMMM d, yyyy h:mm aa"
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    minDate={new Date()}
-                  />
-                </div>
-              </div>
+        <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+          <div className="space-y-6">
+            <div>
+              <label htmlFor="doctor" className="block text-sm font-medium text-gray-700">
+                Select Doctor
+              </label>
+              <select
+                id="doctor"
+                value={selectedDoctor}
+                onChange={(e) => setSelectedDoctor(e.target.value)}
+                required
+                className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+              >
+                <option value="">Choose a doctor</option>
+                {doctors.map((doctor) => (
+                  <option key={doctor.id} value={doctor.id}>
+                    Dr. {doctor.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-              {/* Meeting URL */}
-              <div>
-                <h3 className="text-lg font-medium text-gray-900 border-b pb-2">
-                  Meeting Information
-                </h3>
-                <div className="mt-4">
-                  <label htmlFor="meetingUrl" className="block text-sm font-medium text-gray-700">
-                    Meeting URL
-                  </label>
-                  <input
-                    type="url"
-                    id="meetingUrl"
-                    required
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    value={meetingUrl}
-                    onChange={(e) => setMeetingUrl(e.target.value)}
-                    placeholder="https://meet.example.com/your-room"
-                  />
-                </div>
-              </div>
+            <div>
+              <label htmlFor="time" className="block text-sm font-medium text-gray-700">
+                Select Time
+              </label>
+              <select
+                id="time"
+                value={scheduledTime}
+                onChange={(e) => setScheduledTime(e.target.value)}
+                required
+                disabled={!selectedDoctor}
+                className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+              >
+                <option value="">Choose a time slot</option>
+                {availableSlots.map((slot) => (
+                  <option key={slot.time} value={slot.time}>
+                    {new Date(slot.time).toLocaleString()}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-              {/* Consultation Notes */}
-              <div>
-                <h3 className="text-lg font-medium text-gray-900 border-b pb-2">
-                  Additional Information
-                </h3>
-                <div className="mt-4">
-                  <label htmlFor="note" className="block text-sm font-medium text-gray-700">
-                    Consultation Notes
-                  </label>
-                  <textarea
-                    id="note"
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    rows={4}
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    placeholder="Please describe your symptoms or concerns..."
-                  />
-                </div>
-              </div>
+            <div>
+              <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+                Description
+              </label>
+              <textarea
+                id="description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                required
+                rows={4}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                placeholder="Please describe your symptoms or reason for consultation..."
+              />
+            </div>
 
-              {/* Form Actions */}
-              <div className="flex justify-end">
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className={`px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
-                    isSubmitting ? 'opacity-75 cursor-not-allowed' : ''
-                  }`}
-                >
-                  {isSubmitting ? (
-                    <span className="flex items-center">
-                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Booking...
-                    </span>
-                  ) : (
-                    'Book Consultation'
-                  )}
-                </button>
-              </div>
-            </form>
+            <div className="flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={() => router.back()}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                Book Consultation
+              </button>
+            </div>
           </div>
-        </div>
+        </form>
       </div>
     </div>
   );

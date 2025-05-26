@@ -1,3 +1,5 @@
+import { API_CONFIG } from './config';
+
 /**
  * Enhanced API utilities with improved error handling for CORS and authorization
  */
@@ -17,87 +19,42 @@ export const apiRequest = async (endpoint, options = {}) => {
   let token = null;
   if (typeof window !== 'undefined') {
     token = localStorage.getItem('token');
-    console.log('Using token for request:', token ? `${token.substring(0, 15)}...` : 'No token found');
   }
 
   const headers = {
     'Content-Type': 'application/json',
+    ...(token && { 'Authorization': `Bearer ${token}` }),
     ...options.headers,
   };
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  let baseUrl;
-  if (endpoint.startsWith('/api/auth') || endpoint.startsWith('/api/profile') || endpoint.startsWith('/api/user') || endpoint.startsWith('/api/caregiver')) {
-    baseUrl = AUTH_BASE_URL;
-  } else if (endpoint.startsWith('/api/rating')) {
-    baseUrl = RATING_BASE_URL;
+  // Determine the base URL from the endpoint
+  let baseUrl;  if (endpoint.startsWith('/api/auth') || endpoint.startsWith('/api/profile')) {
+    baseUrl = API_CONFIG.auth.baseUrl;
   } else if (endpoint.startsWith('/api/consultations')) {
-    baseUrl = CONSULTATION_BASE_URL;
+    baseUrl = API_CONFIG.consultation.baseUrl;
+  } else if (endpoint.startsWith('/api/rating')) {
+    baseUrl = API_CONFIG.rating.baseUrl;
   } else {
     throw new Error(`Unknown endpoint prefix: ${endpoint}`);
   }
 
-  console.log(`Request to: ${baseUrl}${endpoint}`);
-  console.log('Request method:', options.method || 'GET');
+  const fetchOptions = {
+    ...options,
+    headers,
+    mode: 'cors',
+    credentials: 'include'
+  };
 
   try {
-    const response = await fetch(`${baseUrl}${endpoint}`, {
-      ...options,
-      headers,
-      credentials: 'omit',
-      mode: 'cors',
-    });
-
-    console.log(`Response status: ${response.status}`);
-
-    const responseClone = response.clone();
-
-    if (response.status === 401 || response.status === 403) {
-      console.log(`Authentication/Authorization failed (${response.status}) - handling error`);
-
-      const errorData = await response.json().catch(() => ({
-        message: response.status === 401 ? 'Session expired' : 'You are not authorized for this action'
-      }));
-
-      if (response.status === 401 && typeof window !== 'undefined') {
+    const response = await fetch(`${baseUrl}${endpoint}`, fetchOptions);
+    
+    if (response.status === 401) {
+      if (typeof window !== 'undefined') {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         window.location.href = '/login';
       }
-
-      return new Response(JSON.stringify(errorData), {
-        status: response.status,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    if (endpoint === ENDPOINTS.PROFILE && options.method === 'PUT' && response.ok) {
-      try {
-        const data = await responseClone.json();
-        if (data && data.tokenUpdated === true && data.token) {
-          console.log('Email changed - updating token');
-          localStorage.setItem('token', data.token);
-
-          const userStr = localStorage.getItem('user');
-          if (userStr) {
-            try {
-              const user = JSON.parse(userStr);
-              if (data.profile && data.profile.email) {
-                user.email = data.profile.email;
-                localStorage.setItem('user', JSON.stringify(user));
-                console.log('Updated user email in localStorage');
-              }
-            } catch (e) {
-              console.error('Error updating user in localStorage:', e);
-            }
-          }
-        }
-      } catch (e) {
-        console.error('Error processing profile update response:', e);
-      }
+      throw new Error('Unauthorized');
     }
 
     return response;
@@ -107,181 +64,33 @@ export const apiRequest = async (endpoint, options = {}) => {
   }
 };
 
-/**
- * API endpoints
- */
-export const ENDPOINTS = {
-  // Auth endpoints
-  LOGIN: '/api/auth/login',
-
-  REGISTER: '/api/auth/register', // Single registration endpoint
-  
-
-  // Profile endpoints
-  PROFILE: '/api/profile',
-
-  // CareGiver endpoints
-  ALL_CAREGIVERS: '/api/caregiver/all',
-  SEARCH_CAREGIVERS: '/api/caregiver/search',
-  SEARCH_CAREGIVERS_OPTIMIZED: '/api/caregiver/search-optimized',
-  SEARCH_CAREGIVERS_PAGINATED: '/api/caregiver/search-paginated',
-  SEARCH_CAREGIVERS_ADVANCED: '/api/caregiver/search-advanced',
-  TOP_RATED_CAREGIVERS: '/api/caregiver/top-rated',
-  NAME_SUGGESTIONS: '/api/caregiver/suggestions/names',
-  SPECIALITY_SUGGESTIONS: '/api/caregiver/suggestions/specialities',
-  GET_USER: (id) => `/api/user/${id}`,
-  GET_CAREGIVER: (id) => `/api/caregiver/${id}`,
-
-  // Rating endpoints
-  CREATE_RATING: '/api/rating',
-  GET_RATING_DETAIL: (id) => `/api/rating/${id}`,
-  UPDATE_RATING: (id) => `/api/rating/${id}`,
-  DELETE_RATING: (id) => `/api/rating/${id}`,
-  GET_DOCTOR_RATINGS: (doctorId) => `/api/rating/doctor/${doctorId}`,
-
-  CREATE_CONSULTATION: '/api/consultations',
-};
-
-/**
- * Helper methods for common API operations
- */
 export const api = {
   // Auth
-  login: (credentials) => apiRequest(ENDPOINTS.LOGIN, {
+  login: (credentials) => apiRequest(API_CONFIG.auth.endpoints.login, {
     method: 'POST',
     body: JSON.stringify(credentials),
   }),
-
-  
-  registerPacillian: (data) => {
-    // Add userType for backend to determine which subclass to use
-
-    const registrationData = {
-      ...data,
-      userType: 'PACILLIAN'
-    };
-
-    
-    console.log('Registering Pacillian with data:', registrationData);
-    
-
-    return apiRequest(ENDPOINTS.REGISTER, {
-      method: 'POST',
-      body: JSON.stringify(registrationData),
-    });
-  },
-
-  
-  registerCareGiver: (data) => {
-    // Add userType for backend to determine which subclass to use
-
-    const registrationData = {
-      ...data,
-      userType: 'CAREGIVER'
-    };
-
-    
-    console.log('Registering CareGiver with data:', registrationData);
-
-    return apiRequest(ENDPOINTS.REGISTER, {
-      method: 'POST',
-      body: JSON.stringify(registrationData),
-    });
-  },
-
-  // Profile
-  getProfile: () => apiRequest(ENDPOINTS.PROFILE),
-
-  updateProfile: (data) => apiRequest(ENDPOINTS.PROFILE, {
-    method: 'PUT',
-    body: JSON.stringify(data),
-  }),
-
-  deleteAccount: () => apiRequest(ENDPOINTS.PROFILE, {
-    method: 'DELETE',
-  }),
-
-  
-
-  getAllCareGivers: () => apiRequest(ENDPOINTS.ALL_CAREGIVERS),
-
-  searchCareGivers: (params) => {
-    const queryString = new URLSearchParams(params).toString();
-    return apiRequest(`${ENDPOINTS.SEARCH_CAREGIVERS}?${queryString}`);
-  },
-
-  
-  // CareGivers - New Enhanced Search Methods
-  searchCareGiversOptimized: (params) => {
-    const queryString = new URLSearchParams(params).toString();
-    return apiRequest(`${ENDPOINTS.SEARCH_CAREGIVERS_OPTIMIZED}?${queryString}`);
-  },
-  
-  searchCareGiversPaginated: (params) => {
-    const queryString = new URLSearchParams(params).toString();
-    return apiRequest(`${ENDPOINTS.SEARCH_CAREGIVERS_PAGINATED}?${queryString}`);
-  },
-  
-  searchCareGiversAdvanced: (params) => {
-    const queryString = new URLSearchParams(params).toString();
-    return apiRequest(`${ENDPOINTS.SEARCH_CAREGIVERS_ADVANCED}?${queryString}`);
-  },
-  
-  getTopRatedCareGivers: (params) => {
-    const queryString = new URLSearchParams(params).toString();
-    return apiRequest(`${ENDPOINTS.TOP_RATED_CAREGIVERS}?${queryString}`);
-  },
-  
-  // Autocomplete suggestions
-  getNameSuggestions: (prefix) => {
-    const queryString = new URLSearchParams({ prefix }).toString();
-    return apiRequest(`${ENDPOINTS.NAME_SUGGESTIONS}?${queryString}`);
-  },
-  
-  getSpecialitySuggestions: (query) => {
-    const queryString = new URLSearchParams({ query }).toString();
-    return apiRequest(`${ENDPOINTS.SPECIALITY_SUGGESTIONS}?${queryString}`);
-  },
-  
-
-  getUserProfile: (id) => apiRequest(ENDPOINTS.GET_USER(id)),
-
-  getCareGiverProfile: (id) => apiRequest(ENDPOINTS.GET_CAREGIVER(id)),
-
-
-  // Ratings
-  createRating: (data) => apiRequest(ENDPOINTS.CREATE_RATING, {
-    method: 'POST',
-    body: JSON.stringify(data),
-  }),
-
-  getRatingDetail: (id) => apiRequest(ENDPOINTS.GET_RATING_DETAIL(id)),
-
-  updateRating: (id, data) => apiRequest(ENDPOINTS.UPDATE_RATING(id), {
-    method: 'PUT',
-    body: JSON.stringify(data),
-  }),
-
-  deleteRating: (id) => apiRequest(ENDPOINTS.DELETE_RATING(id), {
-    method: 'DELETE',
-  }),
-
-  getDoctorRatings: (doctorId) => apiRequest(ENDPOINTS.GET_DOCTOR_RATINGS(doctorId)),
-
-
   // Consultations
-  createConsultation: (data) => apiRequest(ENDPOINTS.CREATE_CONSULTATION, {
-    method: 'POST',
-    body: JSON.stringify(data),
-  }),
-
-  getConsultationDetail: (id) => apiRequest(`/api/consultations/${id}`),
-
+  getConsultations: () => apiRequest('/api/consultations'),
+  
+  getPatientConsultations: (patientId) => 
+    apiRequest(`/api/consultations/patient/${patientId}`),
+  
+  getDoctorConsultations: (doctorId) => 
+    apiRequest(`/api/consultations/doctor/${doctorId}`),
+    getConsultationDetail: (id) => 
+    apiRequest(`/api/consultations/${id}`),
+  
   updateConsultationStatus: (id, status) =>
+    apiRequest(`/api/consultations/${id}/status?status=${status}`, {
+      method: 'PATCH'
+    }),
+  
+  deleteConsultation: (id) => 
     apiRequest(`/api/consultations/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify({ status }),
-  }),
+      method: 'DELETE'
+    }),
 
+  // ... existing code for other API methods ...
 };
 
