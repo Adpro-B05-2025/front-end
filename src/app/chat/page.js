@@ -9,6 +9,7 @@ import {
     subscribeRoom,
     disconnectWS
 } from '@/utils/socketService';
+import { api } from '@/utils/api';
 
 export default function ChatPage() {
     const { user } = useAuth();
@@ -21,6 +22,8 @@ export default function ChatPage() {
     const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    // State untuk menyimpan nama dokter dari ChatWindow
+    const [currentContactName, setCurrentContactName] = useState('');
 
     // Chat service URL - should match your backend
     const CHAT_SERVICE_URL = process.env.NEXT_PUBLIC_CHAT_API_URL || 'http://localhost:8082';
@@ -38,26 +41,58 @@ export default function ChatPage() {
     useEffect(() => {
         if (!user) return;
         
-        console.log('Fetching contacts for user:', user.id);
         setLoading(true);
         setError(null);
         
-        // Call the chat service directly
         fetch(`${CHAT_SERVICE_URL}/api/chat/contacts?userId=${user.id}`)
             .then(res => {
-                console.log('Contacts response status:', res.status);
-                if (!res.ok) {
-                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-                }
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 return res.json();
             })
-            .then(list => {
-                console.log('Received contacts:', list);
-                setContacts(list);
-                setError(null);
+            .then(async list => {
+                // Filter out the user's own ID from contacts
+                const filteredList = list.filter(contact => contact.contactId !== user.id);
                 
-                // DON'T connect WebSocket here - only when user selects a contact
+                // Fetch names for contacts if they don't have names
+                const contactsWithNames = await Promise.all(
+                    filteredList.map(async contact => {
+                        // If contact already has a name, use it
+                        if (contact.contactName) {
+                            return contact;
+                        }
+                        
+                        // Otherwise fetch the contact's profile
+                        try {
+                            // Try to get caregiver profile first (likely doctors)
+                            const caregiverRes = await api.getCareGiverProfile(contact.contactId);
+                            if (caregiverRes.ok) {
+                                const data = await caregiverRes.json();
+                                return {
+                                    ...contact,
+                                    contactName: data.name || `User ${contact.contactId}`
+                                };
+                            }
+                            
+                            // If not a caregiver, try regular user profile
+                            const userRes = await api.getUserProfile(contact.contactId);
+                            if (userRes.ok) {
+                                const data = await userRes.json();
+                                return {
+                                    ...contact,
+                                    contactName: data.name || `User ${contact.contactId}`
+                                };
+                            }
+                            
+                            // If neither worked, keep original contact
+                            return contact;
+                        } catch (error) {
+                            console.error(`Error fetching profile for contact ID ${contact.contactId}:`, error);
+                            return contact;
+                        }
+                    })
+                );
                 
+                setContacts(contactsWithNames);
             })
             .catch(err => {
                 console.error('Fetch contacts failed:', err);
@@ -67,17 +102,37 @@ export default function ChatPage() {
             .finally(() => {
                 setLoading(false);
             });
-            
-        // No WebSocket cleanup needed here since we're not connecting yet
-    }, [user, CHAT_SERVICE_URL]);
+        }, [user, CHAT_SERVICE_URL]);
 
     // 3) Selected contact from URL
     useEffect(() => {
         const q = searchParams.get('contactId');
-        if (q && !isNaN(+q)) {
+        // Only select if it's not the user's own ID
+        if (q && !isNaN(+q) && +q !== user?.id) {
             setSelected(+q);
         }
-    }, [searchParams]);
+    }, [searchParams, user]);
+
+    // Safety check to prevent self-chat if user ID changes
+    useEffect(() => {
+        if (selected === user?.id) {
+            setSelected(null);
+        }
+    }, [selected, user]);
+
+    // 5) Update contacts list when we get a name from ChatWindow
+    useEffect(() => {
+        if (currentContactName && selected) {
+            setContacts(prevContacts => {
+                return prevContacts.map(contact => {
+                    if (contact.contactId === selected) {
+                        return { ...contact, contactName: currentContactName };
+                    }
+                    return contact;
+                });
+            });
+        }
+    }, [currentContactName, selected]);
 
     if (!user) return <p>Loading user...</p>;
 
@@ -105,23 +160,13 @@ export default function ChatPage() {
         return (
             <div className="flex items-center justify-center h-screen">
                 <div className="text-center">
-                    <div className="text-red-600 mb-4">
-                        <svg className="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.996-.833-2.732 0L3.732 16.5c-.77.833-.192 2.5 1.732 2.5z" />
-                        </svg>
-                    </div>
-                    <h3 className="text-lg font-medium text-gray-900">Connection Error</h3>
-                    <p className="mt-2 text-gray-600">{error}</p>
+                    <p className="text-red-600 mb-4">{error}</p>
                     <button
                         onClick={() => window.location.reload()}
-                        className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                        className="px-4 py-2 bg-blue-600 text-white rounded"
                     >
                         Retry
                     </button>
-                    <div className="mt-4 text-sm text-gray-500">
-                        <p>Trying to connect to: {CHAT_SERVICE_URL}</p>
-                        <p>Make sure the chat service is running on port 8082</p>
-                    </div>
                 </div>
             </div>
         );
@@ -145,10 +190,10 @@ export default function ChatPage() {
                             <li key={c.contactId} className="mb-2">
                                 <a
                                     href={`?contactId=${c.contactId}`}
-                                    className="block p-4 border rounded-lg hover:bg-gray-100"
                                     onClick={() => setSelected(c.contactId)}
+                                    className="block p-4 border rounded-lg hover:bg-gray-100"
                                 >
-                                    <div className="font-semibold">{c.contactName}</div>
+                                    <div className="font-semibold">{c.contactName || `User ${c.contactId}`}</div>
                                     <div className="text-sm text-gray-500 truncate">
                                         {c.lastMessage || previews[c.contactId] || '—'}
                                     </div>
@@ -157,8 +202,7 @@ export default function ChatPage() {
                         ))
                     ) : (
                         <li className="text-center py-8 text-gray-500">
-                            <div>Tidak ada percakapan.</div>
-                            <div className="text-sm mt-2">Mulai chat dengan dokter dari halaman "Find Doctors"</div>
+                            Tidak ada percakapan.
                         </li>
                     )}
                 </ul>
@@ -183,15 +227,14 @@ export default function ChatPage() {
                     filtered.map(c => (
                         <div
                             key={c.contactId}
-                            onClick={() => {
-                                console.log('Selecting contact:', c.contactId);
-                                setSelected(c.contactId);
-                            }}
+                            onClick={() => setSelected(c.contactId)}
                             className={`p-4 mb-2 rounded-lg cursor-pointer transition-colors ${
-                                selected === c.contactId ? 'bg-blue-100 border-blue-300' : 'hover:bg-gray-100 border-transparent'
+                                selected === c.contactId
+                                    ? 'bg-blue-100 border-blue-300'
+                                    : 'hover:bg-gray-100 border-transparent'
                             } border`}
                         >
-                            <div className="font-semibold">{c.contactName}</div>
+                            <div className="font-semibold">{c.contactName || `User ${c.contactId}`}</div>
                             <div className="text-sm text-gray-500 truncate">
                                 {c.lastMessage || previews[c.contactId] || '—'}
                             </div>
@@ -204,8 +247,7 @@ export default function ChatPage() {
                     ))
                 ) : (
                     <div className="text-center py-8 text-gray-500">
-                        <div>Tidak ada percakapan.</div>
-                        <div className="text-sm mt-2">Mulai chat dengan dokter dari halaman "Find Doctors"</div>
+                        Tidak ada percakapan.
                     </div>
                 )}
             </div>
@@ -219,24 +261,23 @@ export default function ChatPage() {
                         <ChatWindow
                             myId={user.id}
                             contactId={selected}
+                            onNameChange={name => setCurrentContactName(name)}
                             onNewConversation={newId => {
-                                if (!contacts.find(c => c.contactId === newId)) {
-                                    // update contacts list
-                                    const newContact = { contactId: newId, contactName: `User ${newId}` };
-                                    setContacts(prev => [...prev, newContact]);
+                                // Prevent adding self as contact
+                                if (newId !== user.id && !contacts.find(x => x.contactId === newId)) {
+                                    // Use "dokter" as default name for contact ID 1
+                                    const defaultName = newId === 1 ? "dokter" : `User ${newId}`;
+                                    setContacts(prev => [
+                                        ...prev,
+                                        { contactId: newId, contactName: defaultName }
+                                    ]);
                                 }
                             }}
                         />
                     </div>
                 ) : (
                     <div className="flex items-center justify-center h-full text-gray-500">
-                        <div className="text-center">
-                            <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                            </svg>
-                            <p className="mt-2">Pilih kontak untuk memulai chat</p>
-                            <p className="text-sm mt-1">WebSocket akan terhubung setelah Anda memilih kontak</p>
-                        </div>
+                        <p>Pilih kontak untuk memulai chat</p>
                     </div>
                 )}
             </div>

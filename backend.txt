@@ -1,0 +1,2169 @@
+STRUKTUR DIREKTORI
+====================
+      chat/
+        page.js
+        ChatWindow.js
+        [contactId]/
+          page.js
+    components/
+      SideBar.js
+      advanced-search-features.js
+      ChatPanel.js
+      ProtectedRoute.js
+    context/
+      AuthProvider.js
+    utils/
+      withPermissionCheck.js
+      api.js
+      socketService.js
+      permissions.js
+
+DETAIL FILE
+====================
+
+/src/app/chat/page.js
+----------------------------------------
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '@/context/AuthProvider';
+import ChatWindow from './ChatWindow';
+import { useSearchParams } from 'next/navigation';
+import {
+    connectWS,
+    subscribeRoom,
+    disconnectWS
+} from '@/utils/socketService';
+import { api } from '@/utils/api';
+
+export default function ChatPage() {
+    const { user } = useAuth();
+    const searchParams = useSearchParams();
+
+    const [contacts, setContacts] = useState([]);       // { contactId, contactName }[]
+    const [previews, setPreviews] = useState({});       // { [contactId]: lastMessage }
+    const [selected, setSelected] = useState(null);     // contactId
+    const [isDesktop, setIsDesktop] = useState(false);
+    const [search, setSearch] = useState('');
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    // State untuk menyimpan nama dokter dari ChatWindow
+    const [currentContactName, setCurrentContactName] = useState('');
+
+    // Chat service URL - should match your backend
+    const CHAT_SERVICE_URL = process.env.NEXT_PUBLIC_CHAT_API_URL || 'http://localhost:8082';
+
+    // 1) Detect desktop vs mobile
+    useEffect(() => {
+        const mql = window.matchMedia('(min-width: 768px)');
+        const onChange = e => setIsDesktop(e.matches);
+        mql.addListener(onChange);
+        setIsDesktop(mql.matches);
+        return () => mql.removeListener(onChange);
+    }, []);
+
+    // 2) Fetch list of conversation partners once via REST
+    useEffect(() => {
+        if (!user) return;
+        
+        setLoading(true);
+        setError(null);
+        
+        fetch(`${CHAT_SERVICE_URL}/api/chat/contacts?userId=${user.id}`)
+            .then(res => {
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                return res.json();
+            })
+            .then(async list => {
+                // Filter out the user's own ID from contacts
+                const filteredList = list.filter(contact => contact.contactId !== user.id);
+                
+                // Fetch names for contacts if they don't have names
+                const contactsWithNames = await Promise.all(
+                    filteredList.map(async contact => {
+                        // If contact already has a name, use it
+                        if (contact.contactName) {
+                            return contact;
+                        }
+                        
+                        // Otherwise fetch the contact's profile
+                        try {
+                            // Try to get caregiver profile first (likely doctors)
+                            const caregiverRes = await api.getCareGiverProfile(contact.contactId);
+                            if (caregiverRes.ok) {
+                                const data = await caregiverRes.json();
+                                return {
+                                    ...contact,
+                                    contactName: data.name || `User ${contact.contactId}`
+                                };
+                            }
+                            
+                            // If not a caregiver, try regular user profile
+                            const userRes = await api.getUserProfile(contact.contactId);
+                            if (userRes.ok) {
+                                const data = await userRes.json();
+                                return {
+                                    ...contact,
+                                    contactName: data.name || `User ${contact.contactId}`
+                                };
+                            }
+                            
+                            // If neither worked, keep original contact
+                            return contact;
+                        } catch (error) {
+                            console.error(`Error fetching profile for contact ID ${contact.contactId}:`, error);
+                            return contact;
+                        }
+                    })
+                );
+                
+                setContacts(contactsWithNames);
+            })
+            .catch(err => {
+                console.error('Fetch contacts failed:', err);
+                setError(`Failed to load contacts: ${err.message}`);
+                setContacts([]);
+            })
+            .finally(() => {
+                setLoading(false);
+            });
+        }, [user, CHAT_SERVICE_URL]);
+
+    // 3) Selected contact from URL
+    useEffect(() => {
+        const q = searchParams.get('contactId');
+        // Only select if it's not the user's own ID
+        if (q && !isNaN(+q) && +q !== user?.id) {
+            setSelected(+q);
+        }
+    }, [searchParams, user]);
+
+    // Safety check to prevent self-chat if user ID changes
+    useEffect(() => {
+        if (selected === user?.id) {
+            setSelected(null);
+        }
+    }, [selected, user]);
+
+    // 5) Update contacts list when we get a name from ChatWindow
+    useEffect(() => {
+        if (currentContactName && selected) {
+            setContacts(prevContacts => {
+                return prevContacts.map(contact => {
+                    if (contact.contactId === selected) {
+                        return { ...contact, contactName: currentContactName };
+                    }
+                    return contact;
+                });
+            });
+        }
+    }, [currentContactName, selected]);
+
+    if (!user) return <p>Loading user...</p>;
+
+    // 4) Filter contacts by search
+    const filtered = contacts.filter(c =>
+        (c.contactName || c.contactId.toString())
+            .toLowerCase()
+            .includes(search.trim().toLowerCase())
+    );
+
+    // Show loading state
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-screen">
+                <div className="text-center">
+                    <div className="loading-spinner"></div>
+                    <p className="mt-2">Loading chat contacts...</p>
+                </div>
+            </div>
+        );
+    }
+
+    // Show error state
+    if (error) {
+        return (
+            <div className="flex items-center justify-center h-screen">
+                <div className="text-center">
+                    <p className="text-red-600 mb-4">{error}</p>
+                    <button
+                        onClick={() => window.location.reload()}
+                        className="px-4 py-2 bg-blue-600 text-white rounded"
+                    >
+                        Retry
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    // 5) Mobile view: simple list
+    if (!isDesktop) {
+        return (
+            <div className="max-w-md mx-auto p-4">
+                <h1 className="text-xl font-bold mb-4">Daftar Percakapan</h1>
+                <input
+                    type="text"
+                    placeholder="Search..."
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    className="w-full mb-4 px-3 py-2 border rounded focus:outline-none"
+                />
+                <ul>
+                    {filtered.length > 0 ? (
+                        filtered.map(c => (
+                            <li key={c.contactId} className="mb-2">
+                                <a
+                                    href={`?contactId=${c.contactId}`}
+                                    onClick={() => setSelected(c.contactId)}
+                                    className="block p-4 border rounded-lg hover:bg-gray-100"
+                                >
+                                    <div className="font-semibold">{c.contactName || `User ${c.contactId}`}</div>
+                                    <div className="text-sm text-gray-500 truncate">
+                                        {c.lastMessage || previews[c.contactId] || '—'}
+                                    </div>
+                                </a>
+                            </li>
+                        ))
+                    ) : (
+                        <li className="text-center py-8 text-gray-500">
+                            Tidak ada percakapan.
+                        </li>
+                    )}
+                </ul>
+            </div>
+        );
+    }
+
+    // 6) Desktop layout: sidebar + window
+    return (
+        <div className="flex h-[calc(100vh-4rem-3.5rem)] min-h-0">
+            <div className="w-1/4 border-r border-gray-300 overflow-y-auto min-h-0 p-4">
+                <h2 className="text-lg font-semibold mb-4">Chat Contacts</h2>
+                <input
+                    type="text"
+                    placeholder="Search..."
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    className="w-full mb-4 px-3 py-2 border rounded focus:outline-none"
+                />
+
+                {filtered.length > 0 ? (
+                    filtered.map(c => (
+                        <div
+                            key={c.contactId}
+                            onClick={() => setSelected(c.contactId)}
+                            className={`p-4 mb-2 rounded-lg cursor-pointer transition-colors ${
+                                selected === c.acontactId
+                                    ? 'bg-blue-100 border-blue-300'
+                                    : 'hover:bg-gray-100 border-transparent'
+                            } border`}
+                        >
+                            <div className="font-semibold">{c.contactName || `User ${c.contactId}`}</div>
+                            <div className="text-sm text-gray-500 truncate">
+                                {c.lastMessage || previews[c.contactId] || '—'}
+                            </div>
+                            {selected === c.contactId && (
+                                <div className="text-xs text-blue-600 mt-1">
+                                    Active chat
+                                </div>
+                            )}
+                        </div>
+                    ))
+                ) : (
+                    <div className="text-center py-8 text-gray-500">
+                        Tidak ada percakapan.
+                    </div>
+                )}
+            </div>
+
+            <div className="flex-1 flex flex-col min-h-0">
+                {selected ? (
+                    <div key={selected} className="flex flex-col h-full">
+                        <div className="p-4 border-b bg-gray-50 text-sm text-gray-600">
+                            🔌 Connecting to chat with contact ID: {selected}...
+                        </div>
+                        <ChatWindow
+                            myId={user.id}
+                            contactId={selected}
+                            onNameChange={name => setCurrentContactName(name)}
+                            onNewConversation={newId => {
+                                // Prevent adding self as contact
+                                if (newId !== user.id && !contacts.find(x => x.contactId === newId)) {
+                                    // Use "dokter" as default name for contact ID 1
+                                    const defaultName = newId === 1 ? "dokter" : `User ${newId}`;
+                                    setContacts(prev => [
+                                        ...prev,
+                                        { contactId: newId, contactName: defaultName }
+                                    ]);
+                                }
+                            }}
+                        />
+                    </div>
+                ) : (
+                    <div className="flex items-center justify-center h-full text-gray-500">
+                        <p>Pilih kontak untuk memulai chat</p>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+/src/app/chat/ChatWindow.js
+----------------------------------------
+'use client';
+
+import React, { useState, useEffect, useRef } from 'react';
+import { api } from '@/utils/api';
+import {
+  connectWS,
+  initRoom,
+  subscribeRoom,
+  sendWS,
+  editWS,
+  deleteWS,
+  disconnectWS
+} from '@/utils/socketService';
+
+export default function ChatWindow({
+                                     myId,
+                                     contactId,
+                                     onNewConversation,
+                                     onNameChange // Tambahkan prop ini untuk meneruskan nama
+                                   }) {
+  const [messages, setMessages] = useState([]);
+  const [content, setContent] = useState('');
+  const [editingMessageId, setEditingMessageId] = useState(null);
+  const [selectedMessageId, setSelectedMessageId] = useState(null);
+  const [doctorName, setDoctorName] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [roomId, setRoomId] = useState(null);
+  const [wsConnected, setWsConnected] = useState(false);
+  const bottomRef = useRef(null);
+
+  // Handler for incoming WebSocket messages (new, edited, or deleted)
+  function handleIncoming(msg) {
+    console.log('Handling incoming message:', msg);
+    setMessages(prev => {
+      const idx = prev.findIndex(m => m.id === msg.id);
+      if (idx !== -1) {
+        // update existing message
+        const updated = [...prev];
+        updated[idx] = msg;
+        return updated;
+      } else {
+        // append new message
+        return [...prev, msg];
+      }
+    });
+    // scroll to bottom on every update
+    setTimeout(() => {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  }
+
+  // 1) Fetch doctor profile for header
+  useEffect(() => {
+    if (!contactId || isNaN(contactId)) {
+      console.error('Invalid contactId in ChatWindow:', contactId);
+      setDoctorName(`Invalid Contact`);
+      setLoading(false);
+      return;
+    }
+
+    console.log('Fetching profile for contactId:', contactId);
+    
+    // Try getCareGiverProfile first (since this is likely a doctor)
+    api.getCareGiverProfile(contactId)
+      .then(res => {
+        if (res.ok) {
+          return res.json();
+        } else {
+          // If caregiver profile fails, try regular user profile
+          return api.getUserProfile(contactId).then(res => res.ok ? res.json() : null);
+        }
+      })
+      .then(data => {
+        if (data) {
+          const name = data.name || `User ${contactId}`;
+          setDoctorName(name);
+          // Kirim nama ke parent component
+          if (onNameChange) {
+            onNameChange(name);
+          }
+        } else {
+          const defaultName = contactId === 1 ? "dokter" : `User ${contactId}`;
+          setDoctorName(defaultName);
+          // Kirim default name juga
+          if (onNameChange) {
+            onNameChange(defaultName);
+          }
+        }
+      })
+      .catch(error => {
+        console.error('Error fetching profile:', error);
+        const defaultName = contactId === 1 ? "dokter" : `User ${contactId}`;
+        setDoctorName(defaultName);
+        // Kirim default name juga dalam kasus error
+        if (onNameChange) {
+          onNameChange(defaultName);
+        }
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [contactId, onNameChange]);
+
+  // 2) Initialize WebSocket connection
+  useEffect(() => {
+    if (!contactId || isNaN(contactId) || !myId) {
+      console.error('Cannot initialize WebSocket - invalid IDs:', { contactId, myId });
+      return;
+    }
+
+    console.log('=== INITIALIZING WEBSOCKET ===');
+    console.log('Connecting to chat with doctor ID:', contactId);
+    
+    connectWS(
+      { subscribeTopics: () => {} }, // We'll subscribe after getting room ID
+      () => {
+        console.log('✅ WebSocket connected successfully');
+        setWsConnected(true);
+        
+        // Initialize room with doctor
+        console.log('Initializing room with doctor:', contactId);
+        initRoom(contactId, (receivedRoomId) => {
+          console.log('✅ Room initialized with ID:', receivedRoomId);
+          setRoomId(receivedRoomId);
+          
+          // Now subscribe to this room
+          console.log('Subscribing to room:', receivedRoomId);
+          subscribeRoom(receivedRoomId, handleIncoming);
+          
+          // Request message history after subscribing
+          setTimeout(() => {
+            console.log('Requesting message history for room:', receivedRoomId);
+            // Send history request
+            if (window.stompClient && window.stompClient.active) {
+              window.stompClient.publish({
+                destination: `/app/chat.history.${receivedRoomId}`,
+                body: JSON.stringify({})
+              });
+            }
+          }, 500); // Small delay to ensure subscription is ready
+        });
+      },
+      err => {
+        console.error('❌ WebSocket connection error:', err);
+        setWsConnected(false);
+      }
+    );
+    
+    return () => {
+      console.log('=== CLEANING UP WEBSOCKET ===');
+      console.log('Disconnecting from chat with doctor ID:', contactId);
+      disconnectWS();
+      setWsConnected(false);
+      setRoomId(null);
+    };
+  }, [contactId, myId]);
+
+  // 3) Send or edit a message
+  const handleSubmit = async e => {
+    e.preventDefault();
+    const text = content.trim();
+    if (!text || !roomId) {
+      console.error('Cannot send message - missing text or room ID:', { text, roomId });
+      return;
+    }
+
+    if (editingMessageId) {
+      console.log('Editing message:', editingMessageId);
+      editWS(roomId, { id: editingMessageId, newContent: text });
+      setEditingMessageId(null);
+    } else {
+      console.log('Sending new message to room:', roomId);
+      sendWS(roomId, {
+        senderId: myId,
+        receiverId: contactId,
+        content: text
+      });
+      
+      // notify parent that this contact now has messages
+      if (onNewConversation) {
+        onNewConversation(contactId);
+      }
+    }
+
+    setContent('');
+    setSelectedMessageId(null);
+  };
+
+  // 4) Begin editing an existing message
+  const handleBeginEdit = msg => {
+    setSelectedMessageId(null);
+    setEditingMessageId(msg.id);
+    setContent(msg.content);
+    setTimeout(() => document.getElementById('chat-input')?.focus(), 0);
+  };
+
+  // 5) Delete a message
+  const handleDelete = id => {
+    if (!roomId) {
+      console.error('Cannot delete message - no room ID');
+      return;
+    }
+    console.log('Deleting message:', id);
+    deleteWS(roomId, { id });
+    setSelectedMessageId(null);
+  };
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <div className="p-4 border-b bg-white flex-shrink-0">
+          <div className="animate-pulse">
+            <div className="h-6 bg-gray-300 rounded w-1/3"></div>
+          </div>
+        </div>
+        <div className="flex-1 flex items-center justify-center bg-gray-50">
+          <div className="text-center">
+            <div className="loading-spinner"></div>
+            <p className="mt-2 text-gray-600">Loading chat...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state for invalid contactId
+  if (!contactId || isNaN(contactId)) {
+    return (
+      <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <div className="p-4 border-b bg-red-50 flex-shrink-0">
+          <h2 className="font-bold text-lg text-red-600">Error</h2>
+        </div>
+        <div className="flex-1 flex items-center justify-center bg-gray-50">
+          <div className="text-center">
+            <p className="text-red-600">Invalid contact ID. Cannot load chat.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+      <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+        {/* HEADER */}
+        <div className="p-4 border-b bg-white flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <h2 className="font-bold text-lg">{doctorName}</h2>
+            <div className="flex items-center space-x-2">
+              <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+              <span className="text-xs text-gray-500">
+                {wsConnected ? 'Connected' : 'Disconnected'}
+              </span>
+              {roomId && (
+                <span className="text-xs text-gray-400">Room: {roomId}</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* MESSAGE LIST */}
+        <div className="flex-1 overflow-y-auto p-4 bg-gray-50 min-h-0">
+          {!wsConnected && (
+            <div className="text-center py-4">
+              <div className="text-yellow-600 bg-yellow-100 px-4 py-2 rounded-lg inline-block">
+                Connecting to chat server...
+              </div>
+            </div>
+          )}
+          
+          {wsConnected && !roomId && (
+            <div className="text-center py-4">
+              <div className="text-blue-600 bg-blue-100 px-4 py-2 rounded-lg inline-block">
+                Initializing chat room...
+              </div>
+            </div>
+          )}
+
+          {messages.map(msg => {
+            const isMe = msg.senderId === myId;
+            return (
+                <div
+                    key={msg.id}
+                    className={`flex ${isMe ? 'justify-end' : 'justify-start'} mb-2`}
+                >
+                  <div className="relative max-w-[70%]">
+                    <div className={`p-2 pr-8 rounded-lg ${isMe ? 'bg-blue-200' : 'bg-gray-200'}`}>
+                      <p>
+                        {msg.status === 'deleted'
+                            ? <em className="text-gray-500">message deleted</em>
+                            : msg.content}
+                      </p>
+                      <span className="block text-xs text-gray-600 text-right mt-1">
+                    {new Date(msg.timestamp).toLocaleTimeString()}
+                        {msg.status === 'edited' && (
+                            <span className="ml-1 italic text-gray-500">(edited)</span>
+                        )}
+                  </span>
+                    </div>
+
+                    {isMe && msg.status !== 'deleted' && (
+                        <button
+                            onClick={() => setSelectedMessageId(msg.id)}
+                            className="absolute top-1.5 right-1.5 text-gray-600 hover:text-gray-800"
+                        >
+                          ⋮
+                        </button>
+                    )}
+
+                    {selectedMessageId === msg.id && (
+                        <div className="flex justify-end space-x-2 mt-1">
+                          <button
+                              onClick={() => handleBeginEdit(msg)}
+                              className="text-sm text-blue-600 hover:underline"
+                          >
+                            Edit
+                          </button>
+                          <button
+                              onClick={() => handleDelete(msg.id)}
+                              className="text-sm text-red-600 hover:underline"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                    )}
+                  </div>
+                </div>
+            );
+          })}
+          <div ref={bottomRef} />
+        </div>
+
+        {/* INPUT / FORM */}
+        <form onSubmit={handleSubmit} className="flex p-4 border-t bg-white flex-shrink-0">
+          <input
+              id="chat-input"
+              type="text"
+              value={content}
+              onChange={e => setContent(e.target.value)}
+              placeholder={
+                !roomId ? 'Connecting...' :
+                !editingMessageId && messages.length === 0
+                    ? 'Halo Dokter! Saya mau konsul hari ini.'
+                    : ''
+              }
+              className="flex-1 border rounded px-3 py-2 focus:outline-none"
+              disabled={!wsConnected || !roomId}
+              required
+          />
+          <button
+              type="submit"
+              disabled={!wsConnected || !roomId}
+              className={`ml-2 px-4 py-2 rounded text-white ${
+                  !wsConnected || !roomId ? 'bg-gray-400 cursor-not-allowed' :
+                  editingMessageId ? 'bg-green-500' : 'bg-blue-500'
+              }`}
+          >
+            {editingMessageId ? 'Update' : 'Kirim'}
+          </button>
+        </form>
+      </div>
+  );
+}
+
+/src/app/chat/[contactId]/page.js
+----------------------------------------
+'use client';
+
+import React from 'react';
+import ChatWindow from '../ChatWindow';
+import { useAuth } from '@/context/AuthProvider';
+import { redirect } from 'next/navigation';
+
+export default function ChatWithPage({ params }) {
+    const { user } = useAuth();
+    
+    // Add validation and debugging
+    console.log('ChatWithPage params:', params);
+    
+    // Ensure contactId is properly parsed
+    const contactId = params?.contactId ? Number(params.contactId) : null;
+    
+    console.log('Parsed contactId:', contactId);
+    
+    // Validate contactId
+    if (!contactId || isNaN(contactId)) {
+        console.error('Invalid contactId:', params?.contactId);
+        return (
+            <div className="flex items-center justify-center h-screen">
+                <div className="text-center">
+                    <h2 className="text-xl font-bold text-red-600">Invalid Contact ID</h2>
+                    <p className="text-gray-600">The contact ID is missing or invalid.</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (!user) {
+        return (
+            <div className="flex items-center justify-center h-screen">
+                <div className="text-center">
+                    <div className="loading-spinner"></div>
+                    <p className="mt-2">Loading user data...</p>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="h-screen">
+            <ChatWindow 
+                myId={user.id} 
+                contactId={contactId}
+                onNewConversation={() => {}} // Add empty handler or implement as needed
+            />
+        </div>
+    );
+}
+
+/src/components/SideBar.js
+----------------------------------------
+import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+    connectWS,
+    subscribeRoom,
+    disconnectWS
+} from '@/utils/socketService';
+
+/**
+ * contacts: array of { contactId, contactName }
+ */
+export default function Sidebar({ contacts }) {
+    const router = useRouter();
+    const [previews, setPreviews] = useState({});
+
+    // Subscribe to each contact's message topic to keep previews up-to-date
+    useEffect(() => {
+        if (contacts.length === 0) return;
+
+        connectWS(
+            {
+                subscribeTopics: client => {
+                    contacts.forEach(c =>
+                        subscribeRoom(c.contactId, msg => {
+                            setPreviews(p => ({ ...p, [c.contactId]: msg.content }));
+                        })
+                    );
+                }
+            },
+            () => {},
+            err => console.error('WebSocket error', err)
+        );
+
+        return () => {
+            disconnectWS();
+        };
+    }, [contacts]);
+
+    return (
+        <div className="w-1/4 border-r border-gray-300 bg-white h-full overflow-y-auto">
+            {contacts.map(c => (
+                <div
+                    key={c.contactId}
+                    className="p-4 hover:bg-gray-100 cursor-pointer"
+                    onClick={() => router.push(`/chat?contactId=${c.contactId}`)}
+                >
+                    <p className="font-semibold">{c.contactName}</p>
+                    <p className="text-sm text-gray-500 truncate">
+                        {previews[c.contactId] ?? 'No messages yet.'}
+                    </p>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+/src/components/advanced-search-features.js
+----------------------------------------
+'use client';
+
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { api } from '@/utils/api';
+import debounce from 'lodash/debounce';
+
+/**
+ * Custom hook for advanced doctor search with true server-side pagination
+ */
+export const useAdvancedSearch = () => {
+  // Search inputs
+  const [searchName, setSearchName] = useState('');
+  const [searchSpeciality, setSearchSpeciality] = useState('All Specialties');
+  const [minRating, setMinRating] = useState(0);
+  const [locationFilter, setLocationFilter] = useState('');
+
+  // Sorting
+  const [sortBy, setSortBy] = useState('averageRating');
+  const [sortOrder, setSortOrder] = useState('desc');
+
+  // Autocomplete
+  const [nameSuggestions, setNameSuggestions] = useState([]);
+  const [specialitySuggestions, setSpecialitySuggestions] = useState([]);
+  const [showNameSuggestions, setShowNameSuggestions] = useState(false);
+  const [showSpecialitySuggestions, setShowSpecialitySuggestions] = useState(false);
+
+  // Results
+  const [doctors, setDoctors] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchLoading, setSearchLoading] = useState(false);
+  
+  // Pagination - now using server-side pagination
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalElements, setTotalElements] = useState(0);
+  const [pageSize] = useState(12);
+
+  // Refs
+  const nameInputRef = useRef(null);
+  const specialityInputRef = useRef(null);
+  const isFirstRender = useRef(true);
+  const abortControllerRef = useRef(null);
+
+  // Function to fetch doctors using server-side pagination
+  const fetchDoctors = useCallback(async (resetPage = false) => {
+    // Cancel previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    // Create new abort controller
+    abortControllerRef.current = new AbortController();
+    
+    setSearchLoading(true);
+    
+    try {
+      // Prepare search parameters
+      const params = {
+        page: resetPage ? 0 : currentPage,
+        size: pageSize,
+        sortBy: sortBy,
+        sortDirection: sortOrder
+      };
+      
+      // Add search filters
+      if (searchName.trim()) {
+        params.name = searchName.trim();
+      }
+      
+      if (searchSpeciality && searchSpeciality !== 'All Specialties') {
+        params.speciality = searchSpeciality;
+      }
+      
+      console.log('Fetching doctors with params:', params);
+      
+      // Use the advanced search endpoint for server-side sorting and pagination
+      const response = await api.searchCareGiversAdvanced(params);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      console.log('Received paginated data:', data);
+      
+      // Apply client-side filters for fields not supported by backend
+      let filteredDoctors = [...data.content];
+      
+      // Apply rating filter (client-side since backend doesn't support it yet)
+      if (minRating > 0) {
+        filteredDoctors = filteredDoctors.filter(doctor => 
+          (doctor.averageRating || 0) >= minRating
+        );
+      }
+      
+      // Apply location filter (client-side)
+      if (locationFilter.trim()) {
+        const locationLower = locationFilter.toLowerCase().trim();
+        filteredDoctors = filteredDoctors.filter(doctor => 
+          (doctor.workAddress || '').toLowerCase().includes(locationLower)
+        );
+      }
+      
+      // Update state with paginated results
+      setDoctors(filteredDoctors);
+      setCurrentPage(data.number);
+      setTotalPages(data.totalPages);
+      setTotalElements(data.totalElements);
+      
+      // If we reset the page, update currentPage state
+      if (resetPage && data.number !== currentPage) {
+        setCurrentPage(data.number);
+      }
+      
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        console.error('Error fetching doctors:', error);
+        setDoctors([]);
+        setTotalPages(1);
+        setTotalElements(0);
+      }
+    } finally {
+      setSearchLoading(false);
+      setLoading(false);
+    }
+  }, [searchName, searchSpeciality, sortBy, sortOrder, currentPage, pageSize, minRating, locationFilter]);
+
+  // Debounced search function for text inputs
+  const debouncedSearch = useCallback(
+    debounce(() => {
+      fetchDoctors(true); // Reset to first page when searching
+    }, 300),
+    [fetchDoctors]
+  );
+
+  // Effect for search inputs (name and speciality) - debounced
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      fetchDoctors(true); // Initial load
+      return;
+    }
+    
+    // Trigger debounced search for text inputs
+    debouncedSearch();
+    
+    return () => debouncedSearch.cancel();
+  }, [searchName, searchSpeciality, debouncedSearch]);
+
+  // Effect for sorting changes - immediate
+  useEffect(() => {
+    if (!isFirstRender.current) {
+      fetchDoctors(true); // Reset to first page when sorting changes
+    }
+  }, [sortBy, sortOrder]);
+
+  // Effect for client-side filters - immediate re-filtering
+  useEffect(() => {
+    if (!isFirstRender.current && doctors.length > 0) {
+      // Re-fetch with current search parameters to apply new filters
+      fetchDoctors(true);
+    }
+  }, [minRating, locationFilter]);
+
+  // Effect for pagination - immediate
+  useEffect(() => {
+    if (!isFirstRender.current) {
+      fetchDoctors(false); // Don't reset page for pagination
+    }
+  }, [currentPage]);
+
+  // Fetch name suggestions from server
+  const fetchNameSuggestions = useCallback(
+    debounce(async (name) => {
+      if (!name.trim() || name.length < 2) {
+        setNameSuggestions([]);
+        return;
+      }
+      
+      try {
+        const response = await api.getNameSuggestions(name.trim());
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch name suggestions');
+        }
+        
+        const suggestions = await response.json();
+        setNameSuggestions(suggestions);
+        
+      } catch (error) {
+        console.error('Error fetching name suggestions:', error);
+        setNameSuggestions([]);
+      }
+    }, 200),
+    []
+  );
+
+  // Fetch speciality suggestions from server
+  const fetchSpecialitySuggestions = useCallback(
+    debounce(async (query) => {
+      if (!query.trim() || query.length < 2) {
+        setSpecialitySuggestions([]);
+        return;
+      }
+      
+      try {
+        const response = await api.getSpecialitySuggestions(query.trim());
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch speciality suggestions');
+        }
+        
+        const suggestions = await response.json();
+        setSpecialitySuggestions(suggestions);
+        
+      } catch (error) {
+        console.error('Error fetching speciality suggestions:', error);
+        setSpecialitySuggestions([]);
+      }
+    }, 200),
+    []
+  );
+
+  // Update name suggestions when searchName changes
+  useEffect(() => {
+    if (searchName.length >= 2) {
+      fetchNameSuggestions(searchName);
+    } else {
+      setNameSuggestions([]);
+    }
+    
+    return () => fetchNameSuggestions.cancel();
+  }, [searchName, fetchNameSuggestions]);
+
+  // Load initial speciality suggestions
+  useEffect(() => {
+    // Fetch common specialities on mount
+    fetchSpecialitySuggestions('');
+  }, [fetchSpecialitySuggestions]);
+
+  // Handle pagination
+  const handlePageChange = (newPage) => {
+    if (newPage >= 0 && newPage < totalPages && newPage !== currentPage) {
+      setCurrentPage(newPage);
+      // Scroll to top of results
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  // Handle suggestion clicks
+  const handleNameSuggestionClick = (suggestion) => {
+    setSearchName(suggestion);
+    setShowNameSuggestions(false);
+  };
+
+  const handleSpecialitySuggestionClick = (suggestion) => {
+    setSearchSpeciality(suggestion);
+    setShowSpecialitySuggestions(false);
+  };
+
+  // Reset all filters
+  const resetAllFilters = () => {
+    setSearchName('');
+    setSearchSpeciality('All Specialties');
+    setMinRating(0);
+    setLocationFilter('');
+    setSortBy('averageRating');
+    setSortOrder('desc');
+    setCurrentPage(0);
+    
+    // Focus on name input after reset
+    setTimeout(() => {
+      if (nameInputRef.current) {
+        nameInputRef.current.focus();
+      }
+    }, 100);
+  };
+
+  // Get top-rated doctors
+  const getTopRatedDoctors = useCallback(async () => {
+    setSearchLoading(true);
+    
+    try {
+      const params = {
+        page: 0,
+        size: pageSize
+      };
+      
+      const response = await api.getTopRatedCareGivers(params);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch top-rated doctors');
+      }
+      
+      const data = await response.json();
+      
+      setDoctors(data.content);
+      setCurrentPage(data.number);
+      setTotalPages(data.totalPages);
+      setTotalElements(data.totalElements);
+      
+    } catch (error) {
+      console.error('Error fetching top-rated doctors:', error);
+      setDoctors([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, [pageSize]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      debouncedSearch.cancel();
+      fetchNameSuggestions.cancel();
+      fetchSpecialitySuggestions.cancel();
+    };
+  }, [debouncedSearch, fetchNameSuggestions, fetchSpecialitySuggestions]);
+
+  return {
+    // Search inputs
+    searchName,
+    setSearchName,
+    searchSpeciality,
+    setSearchSpeciality,
+    minRating,
+    setMinRating,
+    locationFilter,
+    setLocationFilter,
+    
+    // Sorting
+    sortBy,
+    setSortBy,
+    sortOrder,
+    setSortOrder,
+    
+    // Autocomplete
+    nameSuggestions,
+    specialitySuggestions,
+    showNameSuggestions,
+    setShowNameSuggestions,
+    showSpecialitySuggestions,
+    setShowSpecialitySuggestions,
+    handleNameSuggestionClick,
+    handleSpecialitySuggestionClick,
+    
+    // Results
+    doctors,
+    loading,
+    searchLoading,
+    totalResults: totalElements, // Backwards compatibility
+    totalElements,
+    
+    // Pagination
+    currentPage,
+    totalPages,
+    pageSize,
+    handlePageChange,
+    
+    // Actions
+    resetAllFilters,
+    getTopRatedDoctors,
+    
+    // Refs
+    nameInputRef,
+    specialityInputRef
+  };
+};
+
+/**
+ * AutoComplete Input Component with server-side suggestions
+ */
+export const AutoCompleteInput = ({ 
+  value, 
+  onChange,
+  suggestions = [],
+  onSuggestionClick,
+  showSuggestions = false,
+  onFocus,
+  onBlur,
+  placeholder = 'Search...',
+  inputRef,
+  loading = false,
+  className = ''
+}) => {
+  return (
+    <div className={`relative ${className}`}>
+      <input
+        ref={inputRef}
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        placeholder={placeholder}
+        className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+      
+      {loading && (
+        <div className="absolute right-3 top-2.5">
+          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
+        </div>
+      )}
+      
+      {showSuggestions && suggestions.length > 0 && (
+        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+          {suggestions.map((suggestion, index) => (
+            <div
+              key={index}
+              className="px-4 py-2 hover:bg-blue-50 cursor-pointer"
+              onMouseDown={() => onSuggestionClick(suggestion)}
+            >
+              {suggestion}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * Enhanced Pagination Component with better page information
+ */
+export const Pagination = ({ 
+  currentPage, 
+  totalPages, 
+  totalElements,
+  pageSize,
+  onPageChange,
+  className = ''
+}) => {
+  const pageNumbers = [];
+  
+  // Calculate display range
+  const startItem = currentPage * pageSize + 1;
+  const endItem = Math.min((currentPage + 1) * pageSize, totalElements);
+  
+  // Create array of page numbers to show
+  if (totalPages <= 7) {
+    // If less than 7 pages, show all
+    for (let i = 0; i < totalPages; i++) {
+      pageNumbers.push(i);
+    }
+  } else {
+    // Always show first page
+    pageNumbers.push(0);
+    
+    // If current page is among the first 3 pages
+    if (currentPage < 3) {
+      pageNumbers.push(1, 2, 3, 4);
+      pageNumbers.push('...');
+      pageNumbers.push(totalPages - 1);
+    } 
+    // If current page is among the last 3 pages
+    else if (currentPage >= totalPages - 3) {
+      pageNumbers.push('...');
+      pageNumbers.push(totalPages - 5, totalPages - 4, totalPages - 3, totalPages - 2);
+      pageNumbers.push(totalPages - 1);
+    }
+    // If current page is in the middle
+    else {
+      pageNumbers.push('...');
+      pageNumbers.push(currentPage - 1, currentPage, currentPage + 1);
+      pageNumbers.push('...');
+      pageNumbers.push(totalPages - 1);
+    }
+  }
+  
+  return (
+    <div className={`flex flex-col sm:flex-row items-center justify-between ${className}`}>
+      {/* Results info */}
+      <div className="text-sm text-gray-700 mb-4 sm:mb-0">
+        Showing {startItem} to {endItem} of {totalElements} results
+      </div>
+      
+      {/* Page navigation */}
+      <div className="flex items-center">
+        <button
+          onClick={() => onPageChange(Math.max(0, currentPage - 1))}
+          disabled={currentPage === 0}
+          className={`px-3 py-1 rounded-md mr-1 ${
+            currentPage === 0
+              ? 'text-gray-400 cursor-not-allowed'
+              : 'text-blue-600 hover:bg-blue-50'
+          }`}
+        >
+          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+        
+        {pageNumbers.map((pageNum, index) => (
+          <button
+            key={index}
+            onClick={() => typeof pageNum === 'number' ? onPageChange(pageNum) : null}
+            disabled={pageNum === '...'}
+            className={`px-3 py-1 mx-0.5 rounded-md ${
+              pageNum === currentPage
+                ? 'bg-blue-600 text-white'
+                : pageNum === '...'
+                  ? 'text-gray-500 cursor-default'
+                  : 'text-blue-600 hover:bg-blue-50'
+            }`}
+          >
+            {pageNum === '...' ? '...' : pageNum + 1}
+          </button>
+        ))}
+        
+        <button
+          onClick={() => onPageChange(Math.min(totalPages - 1, currentPage + 1))}
+          disabled={currentPage === totalPages - 1}
+          className={`px-3 py-1 rounded-md ml-1 ${
+            currentPage === totalPages - 1
+              ? 'text-gray-400 cursor-not-allowed'
+              : 'text-blue-600 hover:bg-blue-50'
+          }`}
+        >
+          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * Enhanced Sort Dropdown Component
+ */
+export const SortDropdown = ({
+  sortBy,
+  setSortBy,
+  sortOrder,
+  setSortOrder,
+  className = ''
+}) => {
+  const handleSortChange = (e) => {
+    const value = e.target.value;
+    const [field, order] = value.split(':');
+    setSortBy(field);
+    setSortOrder(order);
+  };
+
+  return (
+    <div className={className}>
+      <select
+        value={`${sortBy}:${sortOrder}`}
+        onChange={handleSortChange}
+        className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        <option value="averageRating:desc">Highest Rated</option>
+        <option value="averageRating:asc">Lowest Rated</option>
+        <option value="name:asc">Name (A-Z)</option>
+        <option value="name:desc">Name (Z-A)</option>
+        <option value="speciality:asc">Speciality (A-Z)</option>
+        <option value="speciality:desc">Speciality (Z-A)</option>
+      </select>
+    </div>
+  );
+};
+
+export default {
+  useAdvancedSearch,
+  AutoCompleteInput,
+  Pagination,
+  SortDropdown
+};
+
+/src/components/ChatPanel.js
+----------------------------------------
+import React, { useState } from 'react';
+import { sendWS } from '@/utils/socketService';
+
+/**
+ * roomId         – ID ruang chat saat ini
+ * messages       – daftar pesan [{ id, senderId, content, … }]
+ * selectedUser   – { id, name } lawan bicara
+ * currentUserId  – ID user sendiri
+ */
+export default function ChatPanel({ roomId, messages, selectedUser, currentUserId }) {
+    const [content, setContent] = useState('');
+
+    const handleSend = () => {
+        if (!content.trim()) return;
+        sendWS(roomId, {
+            senderId: currentUserId,
+            receiverId: selectedUser.id,
+            content
+        });
+        setContent('');
+    };
+
+    return (
+        <div className="w-3/4 flex flex-col justify-between h-full bg-gray-50">
+            {/* Header */}
+            <div className="p-4 border-b bg-white">
+                <h2 className="font-bold text-lg">Chatting with {selectedUser.name}</h2>
+            </div>
+
+            {/* Message list */}
+            <div className="flex-1 p-4 overflow-y-auto space-y-2 flex flex-col">
+                {messages.map(msg => (
+                    <div
+                        key={msg.id}
+                        className={`max-w-[70%] p-2 rounded-lg ${
+                            msg.senderId === currentUserId
+                                ? 'bg-blue-200 self-end'
+                                : 'bg-gray-200 self-start'
+                        }`}
+                    >
+                        {msg.content}
+                    </div>
+                ))}
+            </div>
+
+            {/* Input form */}
+            <div className="p-4 border-t bg-white flex gap-2">
+                <input
+                    type="text"
+                    value={content}
+                    onChange={e => setContent(e.target.value)}
+                    placeholder="Type a message…"
+                    className="flex-1 border rounded p-2"
+                />
+                <button
+                    onClick={handleSend}
+                    className="bg-blue-500 text-white px-4 py-2 rounded"
+                >
+                    Send
+                </button>
+            </div>
+        </div>
+    );
+}
+
+/src/components/ProtectedRoute.js
+----------------------------------------
+// components/ProtectedRoute.js
+'use client';
+
+import { useAuth } from '@/context/AuthProvider';
+import { hasPermission } from '@/utils/permissions';
+import { useRouter, usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { toast } from 'react-toastify';
+
+export default function ProtectedRoute({ 
+  children, 
+  action,
+  resourceId = null,
+  fallbackPath = '/login'
+}) {
+  const { user, isAuthenticated, loading } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+  const [authorized, setAuthorized] = useState(false);
+
+  useEffect(() => {
+    // Check authentication first
+    if (!loading) {
+      if (!isAuthenticated) {
+        // Redirect to login
+        toast.error('Please log in to access this page');
+        router.push(`/login?redirect=${encodeURIComponent(pathname)}`);
+        return;
+      }
+      
+      // If action is provided, check permissions
+      if (action) {
+        const permitted = hasPermission(user, action, resourceId);
+        setAuthorized(permitted);
+        
+        if (!permitted) {
+          toast.error('You do not have permission to access this page');
+          router.push(fallbackPath);
+        }
+      } else {
+        // If no action needed, just authenticate
+        setAuthorized(true);
+      }
+    }
+  }, [loading, isAuthenticated, user, action, resourceId, router, pathname, fallbackPath]);
+
+  // Show loading state
+  if (loading || !authorized) {
+    return <div className="flex justify-center items-center h-screen">Loading...</div>;
+  }
+
+  // If authorized, render children
+  return children;
+}
+
+/src/context/AuthProvider.js
+----------------------------------------
+'use client';
+
+import { createContext, useContext, useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { api } from '@/utils/api';
+import { toast } from 'react-toastify';
+import { hasPermission } from '@/utils/permissions';
+
+// Create context
+const AuthContext = createContext();
+
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const router = useRouter();
+
+  // Initialize auth state from localStorage
+  useEffect(() => {
+    const initializeAuth = async () => {
+      try {
+        // Check if running in the browser
+        if (typeof window !== 'undefined') {
+          const token = localStorage.getItem('token');
+          const userStr = localStorage.getItem('user');
+          
+          if (token && userStr) {
+            const userData = JSON.parse(userStr);
+            setUser(userData);
+            setIsAuthenticated(true);
+            
+            // Verify token is still valid by making a request to /api/profile
+            try {
+              const response = await api.getProfile();
+              if (!response.ok) {
+                // Token is invalid or expired
+                handleLogout('Your session has expired. Please log in again.');
+              } else {
+                // Update user data with latest profile info
+                const profileData = await response.json();
+                const updatedUserData = {
+                  ...userData,
+                  name: profileData.name,
+                  // Add any other fields you want to keep in sync
+                };
+                localStorage.setItem('user', JSON.stringify(updatedUserData));
+                setUser(updatedUserData);
+              }
+            } catch (error) {
+              console.error('Error verifying authentication:', error);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error initializing auth:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initializeAuth();
+  }, []);
+
+  // Login function
+  const login = async (email, password) => {
+    setLoading(true);
+    try {
+      const response = await api.login({ email, password });
+      const data = await response.json();
+
+      if (response.ok) {
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify({
+          id: data.id,
+          email: data.email,
+          roles: data.roles,
+          name: data.name
+        }));
+
+        setUser({
+          id: data.id,
+          email: data.email,
+          roles: data.roles,
+          name: data.name
+        });
+        setIsAuthenticated(true);
+        toast.success('Login successful!');
+        return true;
+      } else {
+        toast.error(data.message || 'Invalid email or password');
+        return false;
+      }
+    } catch (error) {
+      toast.error('An error occurred. Please try again.');
+      console.error('Login error:', error);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Logout function
+  const handleLogout = (message) => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setUser(null);
+    setIsAuthenticated(false);
+    
+    if (message) {
+      toast.info(message);
+    }
+    
+    router.push('/login');
+  };
+
+  // Helper function to get user roles
+  const getUserRoles = () => {
+    return user?.roles || [];
+  };
+
+  // Return the context provider
+  return (
+    <AuthContext.Provider value={{ 
+      user, 
+      loading, 
+      isAuthenticated,
+      login,
+      logout: handleLogout,
+      refreshUser: async () => {
+        try {
+          const response = await api.getProfile();
+          if (response.ok) {
+            const profileData = await response.json();
+            const updatedUserData = {
+              ...user,
+              name: profileData.name,
+              email: profileData.email, // Add this line to update email
+              // Add other fields you want to keep in sync
+            };
+            localStorage.setItem('user', JSON.stringify(updatedUserData));
+            setUser(updatedUserData);
+          }
+        } catch (error) {
+          console.error('Error refreshing user data:', error);
+        }
+      },
+      // Add these new properties
+      roles: getUserRoles(),
+      isCareGiver: getUserRoles().includes('ROLE_CAREGIVER'),
+      isPacillian: getUserRoles().includes('ROLE_PACILLIAN'),
+      // Add permission check
+      hasPermission: (action, resourceId = null) => hasPermission(user, action, resourceId)
+    }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+// Custom hook to use the auth context
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+}
+
+/src/utils/withPermissionCheck.js
+----------------------------------------
+import { hasPermission } from '@/utils/permissions';
+import { toast } from 'react-toastify';
+
+/**
+ * Higher-Order Function that wraps API calls with permission checks
+ * 
+ * @param {Function} apiCall - The API function to wrap
+ * @param {String} action - The action to check permission for
+ * @param {Function} getResourceId - Optional function to extract resource ID from args
+ * @returns {Function} - Wrapped function that checks permissions before calling API
+ */
+export const withPermissionCheck = (apiCall, action, getResourceId = null) => {
+  return async (...args) => {
+    // Get user from localStorage
+    const user = typeof window !== 'undefined' 
+      ? JSON.parse(localStorage.getItem('user'))
+      : null;
+    
+    if (!user) {
+      toast.error('You must be logged in');
+      return { 
+        ok: false, 
+        status: 401, 
+        json: () => Promise.resolve({ message: 'Not authenticated' })
+      };
+    }
+    
+    // Get resource ID if function provided
+    const resourceId = getResourceId ? getResourceId(...args) : null;
+    
+    // Check permission first
+    if (!hasPermission(user, action, resourceId)) {
+      console.log(`Permission denied for action: ${action}, resourceId: ${resourceId}`);
+      toast.error('You do not have permission to perform this action');
+      return { 
+        ok: false, 
+        status: 403, 
+        json: () => Promise.resolve({ message: 'Not authorized' })
+      };
+    }
+    
+    // If allowed, proceed with API call
+    console.log(`Permission granted for action: ${action}, proceeding with API call`);
+    return apiCall(...args);
+  };
+};
+
+/src/utils/api.js
+----------------------------------------
+/**
+ * Enhanced API utilities with improved error handling for CORS and authorization
+ */
+
+// Get API base URL from environment variables, with fallback value
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://ec2-13-219-192-16.compute-1.amazonaws.com:8081';
+
+/**
+ * Makes a request to the API with authentication if a token is available
+ * 
+ * @param {string} endpoint - The API endpoint (without the base URL)
+ * @param {Object} options - Fetch options (method, headers, body, etc.)
+ * @returns {Promise} - Fetch promise
+ */
+export const apiRequest = async (endpoint, options = {}) => {
+  // Get stored auth token if available
+  let token = null;
+  if (typeof window !== 'undefined') {
+    token = localStorage.getItem('token');
+    console.log('Using token for request:', token ? `${token.substring(0, 15)}...` : 'No token found');
+  }
+
+  // Prepare headers
+  const headers = {
+    'Content-Type': 'application/json',
+    ...options.headers,
+  };
+
+  // Add authorization header if token exists
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  // Log request details for debugging
+  console.log(`Request to: ${API_BASE_URL}${endpoint}`);
+  console.log('Request method:', options.method || 'GET');
+  
+  try {
+    // Make the request with proper CORS handling
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      ...options,
+      headers,
+      credentials: 'omit', // Keep this as 'omit' as in the original code
+      mode: 'cors',
+    });
+    
+    console.log(`Response status: ${response.status}`);
+    
+    // Clone the response to extract the email change information
+    // We need to clone it because we'll be parsing the body later
+    const responseClone = response.clone();
+    
+    // Handle authorization errors (401 and 403)
+    if (response.status === 401 || response.status === 403) {
+      console.log(`Authentication/Authorization failed (${response.status}) - handling error`);
+      
+      // Get the error details
+      const errorData = await response.json().catch(() => ({ 
+        message: response.status === 401 ? 'Session expired' : 'You are not authorized for this action'
+      }));
+      
+      // If token expired (401), clear token and redirect
+      if (response.status === 401 && typeof window !== 'undefined') {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+      }
+      
+      // Return the error response
+      return new Response(JSON.stringify(errorData), { 
+        status: response.status,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
+    // Special handling for profile update to check for email changes
+    if (endpoint === ENDPOINTS.PROFILE && options.method === 'PUT' && response.ok) {
+      try {
+        const data = await responseClone.json();
+        
+        // Check if the response contains token update information
+        if (data && data.tokenUpdated === true && data.token) {
+          console.log('Email changed - updating token');
+          localStorage.setItem('token', data.token);
+          
+          // Update user email in localStorage if available
+          const userStr = localStorage.getItem('user');
+          if (userStr) {
+            try {
+              const user = JSON.parse(userStr);
+              if (data.profile && data.profile.email) {
+                user.email = data.profile.email;
+                localStorage.setItem('user', JSON.stringify(user));
+                console.log('Updated user email in localStorage');
+              }
+            } catch (e) {
+              console.error('Error updating user in localStorage:', e);
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Error processing profile update response:', e);
+        // Continue with the original response
+      }
+    }
+    
+    return response;
+  } catch (error) {
+    console.error('API request failed:', error);
+    throw error;
+  }
+};
+
+/**
+ * API endpoints
+ */
+export const ENDPOINTS = {
+  // Auth endpoints
+  LOGIN: '/api/auth/login',
+  REGISTER: '/api/auth/register', // Single registration endpoint
+  
+  // Profile endpoints
+  PROFILE: '/api/profile',
+  
+  // CareGiver endpoints
+  ALL_CAREGIVERS: '/api/caregiver/all',
+  SEARCH_CAREGIVERS: '/api/caregiver/search',
+  SEARCH_CAREGIVERS_OPTIMIZED: '/api/caregiver/search-optimized',
+  SEARCH_CAREGIVERS_PAGINATED: '/api/caregiver/search-paginated',
+  SEARCH_CAREGIVERS_ADVANCED: '/api/caregiver/search-advanced',
+  TOP_RATED_CAREGIVERS: '/api/caregiver/top-rated',
+  NAME_SUGGESTIONS: '/api/caregiver/suggestions/names',
+  SPECIALITY_SUGGESTIONS: '/api/caregiver/suggestions/specialities',
+  GET_USER: (id) => `/api/user/${id}`,
+  GET_CAREGIVER: (id) => `/api/caregiver/${id}`,
+};
+
+/**
+ * Helper methods for common API operations
+ */
+export const api = {
+  // Auth
+  login: (credentials) => apiRequest(ENDPOINTS.LOGIN, {
+    method: 'POST',
+    body: JSON.stringify(credentials),
+  }),
+  
+  registerPacillian: (data) => {
+    // Add userType for backend to determine which subclass to use
+    const registrationData = {
+      ...data,
+      userType: 'PACILLIAN'
+    };
+    
+    console.log('Registering Pacillian with data:', registrationData);
+    
+    return apiRequest(ENDPOINTS.REGISTER, {
+      method: 'POST',
+      body: JSON.stringify(registrationData),
+    });
+  },
+  
+  registerCareGiver: (data) => {
+    // Add userType for backend to determine which subclass to use
+    const registrationData = {
+      ...data,
+      userType: 'CAREGIVER'
+    };
+    
+    console.log('Registering CareGiver with data:', registrationData);
+    
+    return apiRequest(ENDPOINTS.REGISTER, {
+      method: 'POST',
+      body: JSON.stringify(registrationData),
+    });
+  },
+  
+  // Profile
+  getProfile: () => apiRequest(ENDPOINTS.PROFILE),
+  
+  updateProfile: (data) => apiRequest(ENDPOINTS.PROFILE, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
+  
+  deleteAccount: () => apiRequest(ENDPOINTS.PROFILE, {
+    method: 'DELETE',
+  }),
+  
+  // CareGivers - Original methods
+  getAllCareGivers: () => apiRequest(ENDPOINTS.ALL_CAREGIVERS),
+  
+  searchCareGivers: (params) => {
+    const queryString = new URLSearchParams(params).toString();
+    return apiRequest(`${ENDPOINTS.SEARCH_CAREGIVERS}?${queryString}`);
+  },
+  
+  // CareGivers - New Enhanced Search Methods
+  searchCareGiversOptimized: (params) => {
+    const queryString = new URLSearchParams(params).toString();
+    return apiRequest(`${ENDPOINTS.SEARCH_CAREGIVERS_OPTIMIZED}?${queryString}`);
+  },
+  
+  searchCareGiversPaginated: (params) => {
+    const queryString = new URLSearchParams(params).toString();
+    return apiRequest(`${ENDPOINTS.SEARCH_CAREGIVERS_PAGINATED}?${queryString}`);
+  },
+  
+  searchCareGiversAdvanced: (params) => {
+    const queryString = new URLSearchParams(params).toString();
+    return apiRequest(`${ENDPOINTS.SEARCH_CAREGIVERS_ADVANCED}?${queryString}`);
+  },
+  
+  getTopRatedCareGivers: (params) => {
+    const queryString = new URLSearchParams(params).toString();
+    return apiRequest(`${ENDPOINTS.TOP_RATED_CAREGIVERS}?${queryString}`);
+  },
+  
+  // Autocomplete suggestions
+  getNameSuggestions: (prefix) => {
+    const queryString = new URLSearchParams({ prefix }).toString();
+    return apiRequest(`${ENDPOINTS.NAME_SUGGESTIONS}?${queryString}`);
+  },
+  
+  getSpecialitySuggestions: (query) => {
+    const queryString = new URLSearchParams({ query }).toString();
+    return apiRequest(`${ENDPOINTS.SPECIALITY_SUGGESTIONS}?${queryString}`);
+  },
+  
+  // User profiles
+  getUserProfile: (id) => apiRequest(ENDPOINTS.GET_USER(id)),
+  
+  getCareGiverProfile: (id) => apiRequest(ENDPOINTS.GET_CAREGIVER(id)),
+};
+
+/src/utils/socketService.js
+----------------------------------------
+import { Client } from '@stomp/stompjs';
+import SockJS from 'sockjs-client';
+
+const WS_URL = process.env.NEXT_PUBLIC_CHAT_WS_URL || 'http://localhost:8082/ws-chat';
+
+let stompClient = null;
+let currentRoomId = null;
+
+export function connectWS(onMessage, onOpen, onError) {
+    const token = localStorage.getItem('token');
+    if (stompClient && stompClient.active) return;
+
+    console.log('Connecting to WebSocket with token:', token ? 'present' : 'missing');
+
+    stompClient = new Client({
+        webSocketFactory: () => new SockJS(WS_URL),
+
+        // Add Authorization header for STOMP CONNECT frame
+        connectHeaders: {
+            Authorization: `Bearer ${token}`
+        },
+
+        debug: str => console.log('[STOMP]', str),
+        reconnectDelay: 5000,
+
+        onConnect: frame => {
+            console.log('✅ STOMP connected');
+            if (onOpen) onOpen(frame);
+            if (onMessage && onMessage.subscribeTopics) {
+                onMessage.subscribeTopics(stompClient);
+            }
+        },
+
+        onStompError: frame => {
+            console.error('❌ STOMP error:', frame);
+            if (onError) onError(frame);
+        },
+
+        onWebSocketError: event => {
+            console.error('❌ WebSocket error:', event);
+            if (onError) onError(event);
+        }
+    });
+
+    stompClient.activate();
+}
+
+/**
+ * Initialize chat room with doctor and get room ID
+ */
+export function initRoom(doctorId, callback) {
+    if (!stompClient || !stompClient.active) {
+        console.error('WebSocket not connected');
+        return;
+    }
+
+    console.log('Initializing room with doctor:', doctorId);
+
+    // Subscribe to init response topic first
+    const subscription = stompClient.subscribe(
+        `/topic/chat.init.${doctorId}`,
+        message => {
+            const roomId = JSON.parse(message.body);
+            console.log('Received room ID:', roomId);
+            currentRoomId = roomId;
+            callback(roomId);
+            subscription.unsubscribe(); // Clean up subscription after receiving room ID
+        }
+    );
+
+    // Send init request
+    stompClient.publish({
+        destination: `/app/chat.init.${doctorId}`,
+        body: JSON.stringify({}) // Empty body, user ID comes from Principal
+    });
+}
+
+/**
+ * Subscribe to room messages and updates
+ */
+export function subscribeRoom(roomId, handleIncoming) {
+    if (!stompClient || !stompClient.active) {
+        console.error('WebSocket not connected');
+        return;
+    }
+
+    console.log('Subscribing to room:', roomId);
+
+    // Subscribe to new messages
+    stompClient.subscribe(
+        `/topic/chat.${roomId}.messages`,
+        msg => {
+            console.log('Received new message:', msg.body);
+            handleIncoming(JSON.parse(msg.body));
+        }
+    );
+
+    // Subscribe to message updates (edit/delete)
+    stompClient.subscribe(
+        `/topic/chat.${roomId}.updates`,
+        msg => {
+            console.log('Received message update:', msg.body);
+            handleIncoming(JSON.parse(msg.body));
+        }
+    );
+
+    // Get message history
+    stompClient.publish({
+        destination: `/app/chat.history.${roomId}`,
+        body: JSON.stringify({})
+    });
+}
+
+/**
+ * Send message to room
+ */
+export function sendWS(roomId, message) {
+    if (!stompClient || !stompClient.active) {
+        console.error('WebSocket not connected');
+        return;
+    }
+
+    console.log('Sending message to room:', roomId, message);
+
+    stompClient.publish({
+        destination: `/app/chat.send.${roomId}`,
+        body: JSON.stringify(message)
+    });
+}
+
+/**
+ * Edit message via STOMP
+ */
+export function editWS(roomId, { id, newContent }) {
+    if (!stompClient || !stompClient.active) {
+        console.error('WebSocket not connected');
+        return;
+    }
+
+    console.log('Editing message:', id, 'in room:', roomId);
+
+    stompClient.publish({
+        destination: `/app/chat.edit.${roomId}`,
+        body: JSON.stringify({ id, newContent })
+    });
+}
+
+/**
+ * Delete message via STOMP
+ */
+export function deleteWS(roomId, { id }) {
+    if (!stompClient || !stompClient.active) {
+        console.error('WebSocket not connected');
+        return;
+    }
+
+    console.log('Deleting message:', id, 'in room:', roomId);
+
+    stompClient.publish({
+        destination: `/app/chat.delete.${roomId}`,
+        body: JSON.stringify({ id })
+    });
+}
+
+/**
+ * Disconnect
+ */
+export function disconnectWS() {
+    if (stompClient) {
+        console.log('Disconnecting WebSocket');
+        stompClient.deactivate();
+        stompClient = null;
+        currentRoomId = null;
+    }
+}
+
+/src/utils/permissions.js
+----------------------------------------
+// permissions.js
+export const ACTIONS = {
+    VIEW_PROFILE: 'VIEW_PROFILE',
+    UPDATE_PROFILE: 'UPDATE_PROFILE',
+    DELETE_PROFILE: 'DELETE_PROFILE',
+    VIEW_CAREGIVER: 'VIEW_CAREGIVER',
+    VIEW_PACILLIAN_MEDICAL_HISTORY: 'VIEW_PACILLIAN_MEDICAL_HISTORY'
+  };
+  
+  // Check if a user has permission for a specific action and resource
+  export const hasPermission = (user, action, resourceId = null) => {
+    if (!user) return false;
+    
+    const isCareGiver = user.roles && user.roles.includes('ROLE_CAREGIVER');
+    const isPacillian = user.roles && user.roles.includes('ROLE_PACILLIAN');
+    
+    // Check based on user type and action
+    if (isCareGiver) {
+      switch (action) {
+        case ACTIONS.VIEW_PROFILE:
+          return true; // CareGivers can view any profile
+        case ACTIONS.UPDATE_PROFILE:
+        case ACTIONS.DELETE_PROFILE:
+          return !resourceId || user.id === resourceId; // Only their own profile
+        case ACTIONS.VIEW_PACILLIAN_MEDICAL_HISTORY:
+          return true;
+        default:
+          return false;
+      }
+    } else if (isPacillian) {
+      switch (action) {
+        case ACTIONS.VIEW_PROFILE:
+          return !resourceId || user.id === resourceId;
+        case ACTIONS.UPDATE_PROFILE:
+        case ACTIONS.DELETE_PROFILE:
+          return !resourceId || user.id === resourceId; // Only their own profile
+        case ACTIONS.VIEW_CAREGIVER:
+          return true;
+        default:
+          return false;
+      }
+    }
+    
+    return false;
+  };

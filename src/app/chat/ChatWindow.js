@@ -15,7 +15,8 @@ import {
 export default function ChatWindow({
                                      myId,
                                      contactId,
-                                     onNewConversation
+                                     onNewConversation,
+                                     onNameChange // Tambahkan prop ini untuk meneruskan nama
                                    }) {
   const [messages, setMessages] = useState([]);
   const [content, setContent] = useState('');
@@ -71,19 +72,34 @@ export default function ChatWindow({
       })
       .then(data => {
         if (data) {
-          setDoctorName(data.name || `User ${contactId}`);
+          const name = data.name || `User ${contactId}`;
+          setDoctorName(name);
+          // Kirim nama ke parent component
+          if (onNameChange) {
+            onNameChange(name);
+          }
         } else {
-          setDoctorName(`User ${contactId}`);
+          const defaultName = contactId === 1 ? "dokter" : `User ${contactId}`;
+          setDoctorName(defaultName);
+          // Kirim default name juga
+          if (onNameChange) {
+            onNameChange(defaultName);
+          }
         }
       })
       .catch(error => {
         console.error('Error fetching profile:', error);
-        setDoctorName(`User ${contactId}`);
+        const defaultName = contactId === 1 ? "dokter" : `User ${contactId}`;
+        setDoctorName(defaultName);
+        // Kirim default name juga dalam kasus error
+        if (onNameChange) {
+          onNameChange(defaultName);
+        }
       })
       .finally(() => {
         setLoading(false);
       });
-  }, [contactId]);
+  }, [contactId, onNameChange]);
 
   // 2) Initialize WebSocket connection
   useEffect(() => {
@@ -262,55 +278,64 @@ export default function ChatWindow({
 
           {messages.map(msg => {
             const isMe = msg.senderId === myId;
+            // 1) Case-insensitive flag
+            const isEdited = msg.status?.toLowerCase() === 'edited';
+
+            // 3) Debug: cek status di console
+            console.log(`Msg ${msg.id} status:`, msg.status);
+
             return (
-                <div
-                    key={msg.id}
-                    className={`flex ${isMe ? 'justify-end' : 'justify-start'} mb-2`}
-                >
-                  <div className="relative max-w-[70%]">
-                    <div className={`p-2 pr-8 rounded-lg ${isMe ? 'bg-blue-200' : 'bg-gray-200'}`}>
-                      <p>
-                        {msg.status === 'deleted'
-                            ? <em className="text-gray-500">message deleted</em>
-                            : msg.content}
-                      </p>
-                      <span className="block text-xs text-gray-600 text-right mt-1">
-                    {new Date(msg.timestamp).toLocaleTimeString()}
-                        {msg.status === 'edited' && (
-                            <span className="ml-1 italic text-gray-500">(edited)</span>
-                        )}
-                  </span>
+              <div
+                key={msg.id}
+                className={`flex ${isMe ? 'justify-end' : 'justify-start'} mb-2`}
+              >
+                <div className="relative max-w-[70%]">
+                  <div className={`p-2 pr-8 rounded-lg ${isMe ? 'bg-blue-200' : 'bg-gray-200'}`}>
+                    <p>
+                      {msg.status === 'deleted'
+                        ? <em className="text-gray-500">message deleted</em>
+                        : msg.content}
+                    </p>
+
+                    {/* 2) Flex box untuk timestamp + edited */}
+                    <div className="flex justify-end items-center text-xs text-gray-600 mt-1 space-x-1">
+                      <span>{new Date(msg.timestamp).toLocaleTimeString()}</span>
+                      {isEdited && (
+                        <span className="italic text-gray-500">(edited)</span>
+                      )}
                     </div>
-
-                    {isMe && msg.status !== 'deleted' && (
-                        <button
-                            onClick={() => setSelectedMessageId(msg.id)}
-                            className="absolute top-1.5 right-1.5 text-gray-600 hover:text-gray-800"
-                        >
-                          ⋮
-                        </button>
-                    )}
-
-                    {selectedMessageId === msg.id && (
-                        <div className="flex justify-end space-x-2 mt-1">
-                          <button
-                              onClick={() => handleBeginEdit(msg)}
-                              className="text-sm text-blue-600 hover:underline"
-                          >
-                            Edit
-                          </button>
-                          <button
-                              onClick={() => handleDelete(msg.id)}
-                              className="text-sm text-red-600 hover:underline"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                    )}
                   </div>
+
+                  {isMe && msg.status !== 'deleted' && (
+                    <button
+                      onClick={() => setSelectedMessageId(msg.id)}
+                      className="absolute top-1.5 right-1.5 text-gray-600 hover:text-gray-800"
+                    >
+                      ⋮
+                    </button>
+                  )}
+
+                  {selectedMessageId === msg.id && (
+                    <div className="flex justify-end space-x-2 mt-1">
+                      <button
+                        onClick={() => handleBeginEdit(msg)}
+                        className="text-sm text-blue-600 hover:underline"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(msg.id)}
+                        className="text-sm text-red-600 hover:underline"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  )}
                 </div>
+              </div>
             );
           })}
+
           <div ref={bottomRef} />
         </div>
 
