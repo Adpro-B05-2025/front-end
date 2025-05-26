@@ -288,7 +288,7 @@ export default function DoctorDetail({ params }) {
                     Click the button below to schedule a consultation with Dr. {doctor.name}.
                   </p>
                   <Link
-                    href={`/consultations/new?doctorId=${doctor.id}`}
+                    href={`/consultation/book?id=${doctor.id}`}
                     className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
                   >
                     Schedule Consultation
