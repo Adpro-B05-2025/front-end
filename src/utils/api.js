@@ -1,10 +1,13 @@
 /**
  * Enhanced API utilities with improved error handling for CORS and authorization
+ * Now using environment variables for base URLs
  */
 
-export const AUTH_BASE_URL = 'http://localhost:8081';
-export const RATING_BASE_URL = 'http://localhost:8083';
-export const CONSULTATION_BASE_URL = 'http://localhost:8084';
+// Get base URLs from environment variables with fallbacks
+export const AUTH_BASE_URL = process.env.NEXT_PUBLIC_AUTH_API_URL || 'http://localhost:8081';
+export const RATING_BASE_URL = process.env.NEXT_PUBLIC_RATING_API_URL || 'http://localhost:8083';
+export const CONSULTATION_BASE_URL = process.env.NEXT_PUBLIC_CONSULTATION_API_URL || 'http://localhost:8084';
+export const CHAT_BASE_URL = process.env.NEXT_PUBLIC_CHAT_API_URL || 'http://localhost:8082';
 
 /**
  * Makes a request to the API with authentication if a token is available
@@ -36,6 +39,8 @@ export const apiRequest = async (endpoint, options = {}) => {
     baseUrl = RATING_BASE_URL;
   } else if (endpoint.startsWith('/api/consultations')) {
     baseUrl = CONSULTATION_BASE_URL;
+  } else if (endpoint.startsWith('/api/chat')) {
+    baseUrl = CHAT_BASE_URL;
   } else {
     throw new Error(`Unknown endpoint prefix: ${endpoint}`);
   }
@@ -113,10 +118,8 @@ export const apiRequest = async (endpoint, options = {}) => {
 export const ENDPOINTS = {
   // Auth endpoints
   LOGIN: '/api/auth/login',
-
   REGISTER: '/api/auth/register', // Single registration endpoint
   
-
   // Profile endpoints
   PROFILE: '/api/profile',
 
@@ -139,7 +142,12 @@ export const ENDPOINTS = {
   DELETE_RATING: (id) => `/api/rating/${id}`,
   GET_DOCTOR_RATINGS: (doctorId) => `/api/rating/doctor/${doctorId}`,
 
+  // Consultation endpoints
   CREATE_CONSULTATION: '/api/consultations',
+
+  // Chat endpoints (if you need them)
+  // CHAT_MESSAGES: '/api/chat/messages',
+  // CHAT_ROOMS: '/api/chat/rooms',
 };
 
 /**
@@ -152,18 +160,14 @@ export const api = {
     body: JSON.stringify(credentials),
   }),
 
-  
   registerPacillian: (data) => {
     // Add userType for backend to determine which subclass to use
-
     const registrationData = {
       ...data,
       userType: 'PACILLIAN'
     };
 
-    
     console.log('Registering Pacillian with data:', registrationData);
-    
 
     return apiRequest(ENDPOINTS.REGISTER, {
       method: 'POST',
@@ -171,16 +175,13 @@ export const api = {
     });
   },
 
-  
   registerCareGiver: (data) => {
     // Add userType for backend to determine which subclass to use
-
     const registrationData = {
       ...data,
       userType: 'CAREGIVER'
     };
 
-    
     console.log('Registering CareGiver with data:', registrationData);
 
     return apiRequest(ENDPOINTS.REGISTER, {
@@ -201,8 +202,7 @@ export const api = {
     method: 'DELETE',
   }),
 
-  
-
+  // CareGivers
   getAllCareGivers: () => apiRequest(ENDPOINTS.ALL_CAREGIVERS),
 
   searchCareGivers: (params) => {
@@ -210,7 +210,6 @@ export const api = {
     return apiRequest(`${ENDPOINTS.SEARCH_CAREGIVERS}?${queryString}`);
   },
 
-  
   // CareGivers - New Enhanced Search Methods
   searchCareGiversOptimized: (params) => {
     const queryString = new URLSearchParams(params).toString();
@@ -242,12 +241,10 @@ export const api = {
     const queryString = new URLSearchParams({ query }).toString();
     return apiRequest(`${ENDPOINTS.SPECIALITY_SUGGESTIONS}?${queryString}`);
   },
-  
 
   getUserProfile: (id) => apiRequest(ENDPOINTS.GET_USER(id)),
 
   getCareGiverProfile: (id) => apiRequest(ENDPOINTS.GET_CAREGIVER(id)),
-
 
   // Ratings
   createRating: (data) => apiRequest(ENDPOINTS.CREATE_RATING, {
@@ -268,7 +265,6 @@ export const api = {
 
   getDoctorRatings: (doctorId) => apiRequest(ENDPOINTS.GET_DOCTOR_RATINGS(doctorId)),
 
-
   // Consultations
   createConsultation: (data) => apiRequest(ENDPOINTS.CREATE_CONSULTATION, {
     method: 'POST',
@@ -281,7 +277,5 @@ export const api = {
     apiRequest(`/api/consultations/${id}`, {
       method: 'PUT',
       body: JSON.stringify({ status }),
-  }),
-
+    }),
 };
-
