@@ -21,11 +21,8 @@ export default function RatingFormPage() {
     if (consultationId) {
       setLoadingConsultation(true);
       setError(null);
-      fetch(`http://localhost:8084/api/consultation-pacillian/${consultationId}`)
-        .then((res) => {
-          if (!res.ok) throw new Error('Consultation not found');
-          return res.json();
-        })
+
+      getConsultationDetail(consultationId)
         .then((data) => {
           setDoctorId(data.doctorId);
         })
@@ -34,6 +31,7 @@ export default function RatingFormPage() {
           setError('Gagal mengambil data konsultasi.');
         })
         .finally(() => setLoadingConsultation(false));
+
     } else {
       setError('Consultation ID tidak ditemukan di URL.');
     }
