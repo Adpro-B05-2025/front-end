@@ -34,10 +34,16 @@ export default function ConsultationPage() {
 
   const handleViewRating = async (consultationId) => {
     try {
-      const res = await fetch(`http://localhost:8083/api/rating/consultation/${consultationId}`);
-      const json = await res.json();
+      const response = await api.getConsultationRating(consultationId);
 
-      if (json.data.length > 0) {
+      if (!response.ok) {
+        console.error('Failed to get consultation rating:', response.status);
+        return;
+      }
+
+      const json = await response.json();
+
+      if (json.data && json.data.length > 0) {
         const rating = json.data[0];
         setPopupContent(
           <div className="bg-white p-4 rounded shadow-lg max-w-md text-center">
@@ -51,7 +57,10 @@ export default function ConsultationPage() {
               >
                 Edit Rating
               </button>
-              <button onClick={() => setPopupContent(null)} className="bg-gray-400 px-4 py-2 rounded text-white">
+              <button
+                onClick={() => setPopupContent(null)}
+                className="bg-gray-400 px-4 py-2 rounded text-white"
+              >
                 Close
               </button>
             </div>
@@ -68,7 +77,10 @@ export default function ConsultationPage() {
               >
                 Give Rating
               </button>
-              <button onClick={() => setPopupContent(null)} className="bg-gray-400 px-4 py-2 rounded text-white">
+              <button
+                onClick={() => setPopupContent(null)}
+                className="bg-gray-400 px-4 py-2 rounded text-white"
+              >
                 Back
               </button>
             </div>

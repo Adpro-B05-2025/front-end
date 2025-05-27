@@ -265,6 +265,9 @@ export const api = {
 
   getDoctorRatings: (doctorId) => apiRequest(ENDPOINTS.GET_DOCTOR_RATINGS(doctorId)),
 
+  getConsultationRating: (consultationId) => 
+    apiRequest(`/api/rating/consultation/${consultationId}`),
+
   // Consultations
   createConsultation: (data) => apiRequest(ENDPOINTS.CREATE_CONSULTATION, {
     method: 'POST',

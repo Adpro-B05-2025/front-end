@@ -40,13 +40,7 @@ export default function DoctorDetail({ params }) {
       if (!token) throw new Error('No auth token found');
 
       // Fetch caregiver profile with token
-      const response = await fetch(`http://localhost:8081/api/caregiver/${params.id}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      if (!response.ok) throw new Error('Failed to fetch doctor details');
-      const data = await response.json();
+      const data = await api.getCaregiverById(params.id);
 
       if (data.userType !== 'CAREGIVER') {
         toast.error('The requested profile is not a doctor');
@@ -55,26 +49,16 @@ export default function DoctorDetail({ params }) {
       }
       setDoctor(data);
 
-      // Fetch summary with token
-      const summaryRes = await fetch(`http://localhost:8081/api/caregiver/${params.id}/summary`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      if (summaryRes.ok) {
-        const summaryData = await summaryRes.json();
+      // Fetch summary
+      const summaryData = await api.getCaregiverSummary(params.id);
+      if (summaryData?.averageRating) {
         setAverageRating(summaryData.averageRating);
       }
 
-      // Fetch ratings (if this API needs token too, add header)
-      const ratingsRes = await fetch(`http://localhost:8083/api/rating/doctor/${params.id}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      if (ratingsRes.ok) {
-        const ratingsData = await ratingsRes.json();
-        setRatings(ratingsData.data || []);
+      // Fetch ratings
+      const ratingsData = await api.getDoctorRatings(params.id);
+      if (ratingsData?.data) {
+        setRatings(ratingsData.data);
       }
     } catch (error) {
       console.error('Error fetching doctor details:', error);
