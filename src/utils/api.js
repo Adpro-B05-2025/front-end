@@ -134,6 +134,7 @@ export const ENDPOINTS = {
   SPECIALITY_SUGGESTIONS: '/api/caregiver/suggestions/specialities',
   GET_USER: (id) => `/api/user/${id}`,
   GET_CAREGIVER: (id) => `/api/caregiver/${id}`,
+  GET_CAREGIVER_SUMMARY: (id) => `/api/caregiver/${id}/summary`,
 
   // Rating endpoints
   CREATE_RATING: '/api/rating',
@@ -141,7 +142,7 @@ export const ENDPOINTS = {
   UPDATE_RATING: (id) => `/api/rating/${id}`,
   DELETE_RATING: (id) => `/api/rating/${id}`,
   GET_DOCTOR_RATINGS: (doctorId) => `/api/rating/doctor/${doctorId}`,
-
+ 
   // Consultation endpoints
   CREATE_CONSULTATION: '/api/consultation-pacillian',
 
@@ -263,7 +264,11 @@ export const api = {
     method: 'DELETE',
   }),
 
+  getCareGiverSummary: (id) => apiRequest(`/api/caregiver/${id}/summary`),
+
   getDoctorRatings: (doctorId) => apiRequest(ENDPOINTS.GET_DOCTOR_RATINGS(doctorId)),
+
+  getConsultationRatings: (consultationId) => apiRequest(`/api/rating/consultation/${consultationId}`),
 
   // Consultations
   createConsultation: (data) => apiRequest(ENDPOINTS.CREATE_CONSULTATION, {

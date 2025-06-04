@@ -30,11 +30,8 @@ export default function DoctorDetail({ params }) {
       const token = localStorage.getItem('token');
       if (!token) throw new Error('No auth token found');
 
-      const response = await fetch(`http://localhost:8083/api/rating/doctor/${params.id}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      const response = await api.getDoctorRatings(params.id);
+      
       if (!response.ok) throw new Error('Failed to fetch ratings');
       const data = await response.json();
       setRatings(data.data || []);

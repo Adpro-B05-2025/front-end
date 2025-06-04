@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'react-toastify';
+import { apiRequest, ENDPOINTS } from '@/utils/api';
 import { api } from '@/utils/api';
-import { AuthProvider, useAuth } from '@/context/AuthProvider';
+import { useAuth } from '@/context/AuthProvider';
 
 export default function DoctorDetail({ params }) {
   const router = useRouter();
@@ -13,9 +14,8 @@ export default function DoctorDetail({ params }) {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('about');
   const [ratings, setRatings] = useState([]);
-  const [isGenerating, setIsGenerating] = useState(false);
   const [averageRating, setAverageRating] = useState(null);
-  const { user, logout, isAuthenticated } = useAuth();
+  const { user } = useAuth();
 
   useEffect(() => {
     // Check auth and fetch doctor details and ratings
@@ -40,11 +40,8 @@ export default function DoctorDetail({ params }) {
       if (!token) throw new Error('No auth token found');
 
       // Fetch caregiver profile with token
-      const response = await fetch(`http://localhost:8081/api/caregiver/${params.id}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      const response = await apiRequest(ENDPOINTS.GET_CAREGIVER(params.id));
+
       if (!response.ok) throw new Error('Failed to fetch doctor details');
       const data = await response.json();
 
@@ -56,22 +53,14 @@ export default function DoctorDetail({ params }) {
       setDoctor(data);
 
       // Fetch summary with token
-      const summaryRes = await fetch(`http://localhost:8081/api/caregiver/${params.id}/summary`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      const summaryRes = await apiRequest(ENDPOINTS.GET_CAREGIVER_SUMMARY(params.id));
       if (summaryRes.ok) {
         const summaryData = await summaryRes.json();
         setAverageRating(summaryData.averageRating);
       }
 
-      // Fetch ratings (if this API needs token too, add header)
-      const ratingsRes = await fetch(`http://localhost:8083/api/rating/doctor/${params.id}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      const ratingsRes = await api.getDoctorRatings(params.id);
+
       if (ratingsRes.ok) {
         const ratingsData = await ratingsRes.json();
         setRatings(ratingsData.data || []);
@@ -315,9 +304,9 @@ export default function DoctorDetail({ params }) {
                   <div className="flex flex-col sm:flex-row sm:items-center">
                     <div className="flex-shrink-0 sm:mr-8 mb-4 sm:mb-0 text-center">
                       <span className="text-5xl font-bold text-gray-900">
-                        {doctor.averageRating ? doctor.averageRating.toFixed(1) : '-'}
+                          {averageRating ? averageRating.toFixed(1) : '-'}
                       </span>
-                      <div className="mt-1">{renderStarRating(doctor.averageRating)}</div>
+                      <div className="mt-1">{renderStarRating(averageRating)}</div>
                       <p className="text-sm text-gray-600 mt-2">{ratings.length} reviews</p>
                     </div>
                     <div className="flex-grow">

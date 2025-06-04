@@ -10,6 +10,7 @@ import {
   Pagination,
   SortDropdown
 } from '../../components/advanced-search-features';
+import { AuthProvider, useAuth } from '@/context/AuthProvider';
 
 const SPECIALTIES = [
   'All Specialties',
@@ -33,6 +34,7 @@ export default function AdvancedDoctorSearch() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const { user, setAuthState } = useAuth();
 
   // Use React 18's useTransition for non-blocking UI updates
   const [isPending, startTransition] = useTransition();
@@ -468,12 +470,14 @@ export default function AdvancedDoctorSearch() {
                       >
                         View Profile
                       </Link>
-                      <Link
-                        href={`/consultation/book?id=${doctor.id}`}
-                        className="flex-1 text-center px-3 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
-                      >
-                        Book Now
-                      </Link>
+                      {isAuthenticated && user?.roles?.includes('ROLE_PACILLIAN') && (
+                        <Link
+                          href={`/consultation/book?id=${doctor.id}`}
+                          className="flex-1 text-center px-3 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+                        >
+                          Book Now
+                        </Link>
+                      )}                     
                     </div>
                   </div>
                 ))}

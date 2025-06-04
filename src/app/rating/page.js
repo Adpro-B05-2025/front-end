@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'react-toastify';
-import { useAuth } from '@/context/AuthProvider'; // pastikan ini sesuai dengan context kamu
+import { useAuth } from '@/context/AuthProvider'; 
+import { api } from '@/utils/api';
 
 function parseJwt(token) {
   if (!token) return null;
@@ -53,11 +54,7 @@ export default function DoctorDetail() {
     setLoading(true);
     try {
       // Fetch caregiver profile
-      const response = await fetch(`http://localhost:8081/api/caregiver/${userId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await api.getCareGiverProfile(userId);
       if (!response.ok) throw new Error('Failed to fetch doctor details');
       const data = await response.json();
 
@@ -69,22 +66,14 @@ export default function DoctorDetail() {
       setDoctor(data);
 
       // Fetch summary
-      const summaryRes = await fetch(`http://localhost:8081/api/caregiver/${userId}/summary`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const summaryRes = await api.getCareGiverSummary(userId);
       if (summaryRes.ok) {
         const summaryData = await summaryRes.json();
         setAverageRating(summaryData.averageRating);
       }
 
       // Fetch ratings
-      const ratingsRes = await fetch(`http://localhost:8083/api/rating/doctor/${userId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const ratingsRes = await api.getDoctorRatings(userId);
       if (ratingsRes.ok) {
         const ratingsData = await ratingsRes.json();
         setRatings(ratingsData.data || []);
@@ -183,9 +172,9 @@ export default function DoctorDetail() {
             <div className="flex flex-col sm:flex-row sm:items-center">
                 <div className="flex-shrink-0 sm:mr-8 mb-4 sm:mb-0 text-center">
                 <span className="text-5xl font-bold text-gray-900">
-                    {doctor.averageRating ? doctor.averageRating.toFixed(1) : '-'}
+                  {averageRating ? averageRating.toFixed(1) : '-'}
                 </span>
-                <div className="mt-1">{renderStarRating(doctor.averageRating)}</div>
+                <div className="mt-1">{renderStarRating(averageRating)}</div>
                 <p className="text-sm text-gray-600 mt-2">{ratings.length} reviews</p>
                 </div>
 

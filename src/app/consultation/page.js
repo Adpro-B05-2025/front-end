@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthProvider';
 import { useRouter } from 'next/navigation';
+import { api } from '@/utils/api';
+import { apiRequest } from '@/utils/api';
 
 export default function ConsultationPage() {
   const { user } = useAuth();
@@ -15,7 +17,7 @@ export default function ConsultationPage() {
   useEffect(() => {
     const fetchConsultations = async () => {
       try {
-        const res = await fetch('http://localhost:8084/api/consultation-pacillian');
+        const res = await apiRequest('/api/consultation-pacillian');
         const data = await res.json();
         const myConsultations = data.filter((item) => item.patientId === user.id);
         setConsultations(myConsultations);
@@ -33,7 +35,7 @@ export default function ConsultationPage() {
 
   const handleViewRating = async (consultationId) => {
     try {
-      const res = await fetch(`http://localhost:8083/api/rating/consultation/${consultationId}`);
+      const res = await api.getConsultationRatings(consultationId);
       const json = await res.json();
 
       if (json.data.length > 0) {
