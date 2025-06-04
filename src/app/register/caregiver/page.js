@@ -32,7 +32,8 @@ export default function RegisterCareGiver() {
     confirmPassword: '',
     name: '',
     nik: '',
-    workAddress: '',
+    address: '', // Home address
+    workAddress: '', // Work address (separate field)
     phoneNumber: '',
     speciality: ''
   });
@@ -85,7 +86,7 @@ export default function RegisterCareGiver() {
         password: formData.password,
         name: formData.name,
         nik: formData.nik,
-        address: formData.workAddress, // BaseRegisterRequest expects 'address'
+        address: formData.address, // Home address for BaseRegisterRequest
         phoneNumber: formData.phoneNumber,
         speciality: formData.speciality, // RegisterCareGiverRequest specific field
         workAddress: formData.workAddress // RegisterCareGiverRequest specific field
@@ -135,7 +136,7 @@ export default function RegisterCareGiver() {
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <h2 className="text-2xl font-semibold text-center text-gray-800 mb-8 flex items-center justify-center">
             <span className="bg-green-100 text-green-800 p-2 rounded-full mr-2">🩺</span>
-            Register as CareGiver
+            Register as Healthcare Provider
           </h2>
           
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -190,6 +191,7 @@ export default function RegisterCareGiver() {
                   minLength="8"
                   required
                 />
+                <p className="text-xs text-gray-500 mt-1">Minimum 8 characters</p>
               </div>
               
               {/* Confirm Password Field */}
@@ -224,6 +226,8 @@ export default function RegisterCareGiver() {
                   className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
                   placeholder="1234567890123456"
                   maxLength="16"
+                  pattern="[0-9]{16}"
+                  title="NIK must be exactly 16 digits"
                   required
                 />
                 <p className="text-xs text-gray-500 mt-1">16 digits national ID number</p>
@@ -242,31 +246,17 @@ export default function RegisterCareGiver() {
                   onChange={handleChange}
                   className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
                   placeholder="081234567890"
+                  pattern="[0-9]+"
+                  title="Phone number must contain only digits"
                   required
                 />
-              </div>
-              
-              {/* Work Address Field */}
-              <div className="md:col-span-2">
-                <label htmlFor="workAddress" className="block text-sm font-medium text-gray-700 mb-1">
-                  Work Address *
-                </label>
-                <input
-                  id="workAddress"
-                  name="workAddress"
-                  type="text"
-                  value={formData.workAddress}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                  placeholder="Hospital/Clinic address"
-                  required
-                />
+                <p className="text-xs text-gray-500 mt-1">Numbers only (e.g., 081234567890)</p>
               </div>
               
               {/* Specialty Field */}
               <div className="md:col-span-2">
                 <label htmlFor="speciality" className="block text-sm font-medium text-gray-700 mb-1">
-                  Speciality *
+                  Medical Speciality *
                 </label>
                 <select
                   id="speciality"
@@ -276,22 +266,72 @@ export default function RegisterCareGiver() {
                   className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
                   required
                 >
-                  <option value="" disabled>Select your specialty</option>
+                  <option value="" disabled>Select your medical specialty</option>
                   {SPECIALTIES.map((specialty) => (
                     <option key={specialty} value={specialty}>{specialty}</option>
                   ))}
                 </select>
               </div>
+              
+              {/* Home Address Field */}
+              <div className="md:col-span-2">
+                <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1">
+                  Home Address *
+                </label>
+                <textarea
+                  id="address"
+                  name="address"
+                  rows={3}
+                  value={formData.address}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                  placeholder="Enter your complete home address including street, city, postal code"
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">Your personal residence address</p>
+              </div>
+              
+              {/* Work Address Field */}
+              <div className="md:col-span-2">
+                <label htmlFor="workAddress" className="block text-sm font-medium text-gray-700 mb-1">
+                  Work Address (Hospital/Clinic) *
+                </label>
+                <textarea
+                  id="workAddress"
+                  name="workAddress"
+                  rows={3}
+                  value={formData.workAddress}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                  placeholder="Enter your hospital, clinic, or practice address including name, street, city, postal code"
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">Where you practice medicine or provide healthcare services</p>
+              </div>
+            </div>
+            
+            {/* Professional Notice */}
+            <div className="bg-green-50 p-4 rounded-lg">
+              <p className="text-sm text-green-800">
+                <span className="font-medium">Professional Verification:</span> Your registration will be reviewed to verify your medical credentials. You will receive a confirmation email once approved. All information provided will be kept confidential and used only for professional verification and patient care.
+              </p>
             </div>
             
             <div className="pt-4">
               <button
                 type="submit"
                 disabled={isLoading}
-                className={`w-full py-3 px-4 rounded-lg text-white font-medium 
-                ${isLoading ? 'bg-green-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'}`}
+                className={`w-full py-3 px-4 rounded-lg text-white font-medium transition-colors
+                ${isLoading ? 'bg-green-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2'}`}
               >
-                {isLoading ? 'Registering...' : 'Register'}
+                {isLoading ? (
+                  <div className="flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                    Registering...
+                  </div>
+                ) : (
+                  'Register as Healthcare Provider'
+                )}
               </button>
             </div>
             
@@ -300,6 +340,12 @@ export default function RegisterCareGiver() {
                 Already have an account?{' '}
                 <Link href="/login" className="text-green-600 hover:text-green-800 font-medium">
                   Sign in
+                </Link>
+              </p>
+              <p className="text-gray-600 mt-2">
+                Are you a patient?{' '}
+                <Link href="/register/pacillian" className="text-blue-600 hover:text-blue-800 font-medium">
+                  Register as Patient
                 </Link>
               </p>
             </div>

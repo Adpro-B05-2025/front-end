@@ -1,3 +1,4 @@
+// src/app/profile/page.js
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -150,22 +151,8 @@ export default function Profile() {
                 }
             }
 
-            // Make a custom fetch request instead of using api.updateProfile
-            const token = localStorage.getItem('token');
-            const API_BASE_URL = 'http://localhost:8081';
-
-            console.log('Using API base URL:', API_BASE_URL);
-
-            const response = await fetch(`${API_BASE_URL}/api/profile`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify(formData),
-                credentials: 'omit',
-                mode: 'cors'
-            });
+            // Use the api.updateProfile method instead of direct fetch
+            const response = await api.updateProfile(formData);
 
             if (!response.ok) {
                 // Handle error responses...
@@ -241,27 +228,8 @@ export default function Profile() {
         try {
             console.log('Deleting account...');
             
-            // Create request body with password confirmation
-            const deleteBody = {
-                password: deletePassword,
-                confirmation: "DELETE MY ACCOUNT" // Server can check for this exact string
-            };
-            
-            // Get token
-            const token = localStorage.getItem('token');
-            const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://ec2-13-219-192-16.compute-1.amazonaws.com:8081';
-            
-            // Make deletion request
-            const response = await fetch(`${API_BASE_URL}/api/profile`, {
-                method: 'DELETE',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify(deleteBody),
-                credentials: 'omit',
-                mode: 'cors'
-            });
+            // Use the api.deleteAccount method instead of direct fetch
+            const response = await api.deleteAccount();
 
             if (!response.ok) {
                 // Handle different error statuses
