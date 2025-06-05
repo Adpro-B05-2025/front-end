@@ -15,6 +15,7 @@ export default function DoctorDetail({ params }) {
   const [activeTab, setActiveTab] = useState('about');
   const [ratings, setRatings] = useState([]);
   const [averageRating, setAverageRating] = useState(null);
+  const [ratingsError, setRatingsError] = useState(false);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -52,19 +53,41 @@ export default function DoctorDetail({ params }) {
       }
       setDoctor(data);
 
-      // Fetch summary with token
-      const summaryRes = await apiRequest(ENDPOINTS.GET_CAREGIVER_SUMMARY(params.id));
-      if (summaryRes.ok) {
-        const summaryData = await summaryRes.json();
-        setAverageRating(summaryData.averageRating);
+      // Fetch summary with token - handle errors gracefully
+      try {
+        const summaryRes = await apiRequest(ENDPOINTS.GET_CAREGIVER_SUMMARY(params.id));
+        if (summaryRes.ok) {
+          const summaryData = await summaryRes.json();
+          setAverageRating(summaryData.averageRating);
+        } else {
+          console.warn('Failed to fetch caregiver summary, continuing without rating data');
+          setAverageRating(null);
+        }
+      } catch (summaryError) {
+        console.error('Error fetching caregiver summary:', summaryError);
+        setAverageRating(null);
       }
 
-      const ratingsRes = await api.getDoctorRatings(params.id);
-
-      if (ratingsRes.ok) {
-        const ratingsData = await ratingsRes.json();
-        setRatings(ratingsData.data || []);
+      // Fetch ratings - handle errors gracefully
+      try {
+        const ratingsRes = await api.getDoctorRatings(params.id);
+        
+        if (ratingsRes.ok) {
+          const ratingsData = await ratingsRes.json();
+          setRatings(ratingsData.data || []);
+          setRatingsError(false);
+        } else {
+          console.warn('Failed to fetch doctor ratings, continuing without ratings data');
+          setRatings([]);
+          setRatingsError(true);
+        }
+      } catch (ratingsError) {
+        console.error('Error fetching doctor ratings:', ratingsError);
+        setRatings([]);
+        setRatingsError(true);
+        // Don't show error toast for ratings failure, just log it
       }
+
     } catch (error) {
       console.error('Error fetching doctor details:', error);
       toast.error('Failed to load doctor details. Please try again.');
@@ -92,13 +115,17 @@ export default function DoctorDetail({ params }) {
     return distribution;
   };
 
-
   const renderStarRating = (rating) => {
-    if (rating === null || rating === undefined) return 'No ratings yet';
+    if (rating === null || rating === undefined) {
+      return (
+        <div className="flex items-center">
+          <span className="text-gray-500 text-sm">No ratings yet</span>
+        </div>
+      );
+    }
 
     const fullStars = Math.floor(rating);
     const hasHalfStar = rating % 1 >= 0.5;
-    const ratingDistribution = getRatingDistribution();
 
     return (
       <div className="flex items-center">
@@ -216,7 +243,7 @@ export default function DoctorDetail({ params }) {
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                Reviews
+                Reviews {ratingsError && <span className="text-red-500 text-xs">(unavailable)</span>}
               </button>
             </nav>
           </div>
@@ -257,12 +284,14 @@ export default function DoctorDetail({ params }) {
                 <div className="pt-6">
                   <div className="flex items-center justify-between">
                     <h2 className="text-lg font-medium text-gray-900">Ratings & Reviews</h2>
-                    <button
-                      onClick={() => setActiveTab('reviews')}
-                      className="text-sm font-medium text-blue-600 hover:text-blue-500"
-                    >
-                      View all reviews
-                    </button>
+                    {!ratingsError && (
+                      <button
+                        onClick={() => setActiveTab('reviews')}
+                        className="text-sm font-medium text-blue-600 hover:text-blue-500"
+                      >
+                        View all reviews
+                      </button>
+                    )}
                   </div>
                   <div className="mt-3 flex items-center">
                     <div className="flex-shrink-0 mr-4">
@@ -273,7 +302,12 @@ export default function DoctorDetail({ params }) {
                     </div>
                     <div>
                       {renderStarRating(averageRating)}
-                      <p className="text-sm text-gray-500 mt-1">Based on patient reviews</p>
+                      <p className="text-sm text-gray-500 mt-1">
+                        {ratingsError 
+                          ? 'Rating information temporarily unavailable' 
+                          : 'Based on patient reviews'
+                        }
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -300,53 +334,82 @@ export default function DoctorDetail({ params }) {
               <div>
                 <h2 className="text-lg font-medium text-gray-900 mb-4">Ratings & Reviews</h2>
                 
-                <div className="bg-gray-50 rounded-lg p-6 mb-6">
-                  <div className="flex flex-col sm:flex-row sm:items-center">
-                    <div className="flex-shrink-0 sm:mr-8 mb-4 sm:mb-0 text-center">
-                      <span className="text-5xl font-bold text-gray-900">
-                          {averageRating ? averageRating.toFixed(1) : '-'}
-                      </span>
-                      <div className="mt-1">{renderStarRating(averageRating)}</div>
-                      <p className="text-sm text-gray-600 mt-2">{ratings.length} reviews</p>
+                {ratingsError ? (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
+                    <div className="text-yellow-600 mb-2">
+                      <svg className="mx-auto h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 2.146-2.98L17.708 8.02C17.438 7.385 16.897 7 16.291 7H7.709c-.606 0-1.147.385-1.417 1.02L2.938 16.02c-.356 1.313.606 2.98 2.146 2.98z" />
+                      </svg>
                     </div>
-                    <div className="flex-grow">
-                      <p className="text-gray-600 mb-2">Rating breakdown:</p>
-                      <div className="space-y-2">
-                        {[5, 4, 3, 2, 1].map((star) => {
-                          const percent = getRatingDistribution()[star] || 0;
-                          return (
-                            <div key={star} className="flex items-center">
-                              <div className="w-20 text-sm text-gray-600">{star} stars</div>
-                              <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden mx-2">
-                                <div
-                                  className={`h-full rounded-full ${
-                                    star >= 4 ? 'bg-green-500' : star === 3 ? 'bg-yellow-500' : 'bg-red-500'
-                                  }`}
-                                  style={{ width: `${percent}%` }}
-                                />
-                              </div>
-                              <div className="w-12 text-right text-sm text-gray-600">{percent.toFixed(0)}%</div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
+                    <h3 className="text-lg font-medium text-yellow-800 mb-2">Reviews Temporarily Unavailable</h3>
+                    <p className="text-yellow-700">
+                      We're having trouble loading the reviews for this doctor right now. Please try again later.
+                    </p>
                   </div>
-                </div>
-
-                <div className="space-y-6">
-                  {ratings.length === 0 && <p className="text-gray-600">No reviews yet.</p>}
-                  {ratings.map((review) => (
-                    <div key={review.id} className="bg-gray-50 p-4 rounded-lg shadow-sm">
-                      <div className="flex items-center mb-2">
-                        <span className="font-semibold text-gray-800">{<span>{`Pacillian ${review.userId}`}</span> || 'Anonymous'}</span>
-                        <div className="ml-4">{renderStarRating(review.score)}</div>
-                        <span className="ml-auto text-sm text-gray-500">{new Date(review.createdAt).toLocaleDateString()}</span>
+                ) : (
+                  <>
+                    <div className="bg-gray-50 rounded-lg p-6 mb-6">
+                      <div className="flex flex-col sm:flex-row sm:items-center">
+                        <div className="flex-shrink-0 sm:mr-8 mb-4 sm:mb-0 text-center">
+                          <span className="text-5xl font-bold text-gray-900">
+                              {averageRating ? averageRating.toFixed(1) : '-'}
+                          </span>
+                          <div className="mt-1">{renderStarRating(averageRating)}</div>
+                          <p className="text-sm text-gray-600 mt-2">{ratings.length} reviews</p>
+                        </div>
+                        <div className="flex-grow">
+                          <p className="text-gray-600 mb-2">Rating breakdown:</p>
+                          <div className="space-y-2">
+                            {[5, 4, 3, 2, 1].map((star) => {
+                              const percent = getRatingDistribution()[star] || 0;
+                              return (
+                                <div key={star} className="flex items-center">
+                                  <div className="w-20 text-sm text-gray-600">{star} stars</div>
+                                  <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden mx-2">
+                                    <div
+                                      className={`h-full rounded-full ${
+                                        star >= 4 ? 'bg-green-500' : star === 3 ? 'bg-yellow-500' : 'bg-red-500'
+                                      }`}
+                                      style={{ width: `${percent}%` }}
+                                    />
+                                  </div>
+                                  <div className="w-12 text-right text-sm text-gray-600">{percent.toFixed(0)}%</div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
                       </div>
-                      <p className="text-gray-700">{review.comment}</p>
                     </div>
-                  ))}
-                </div>
+
+                    <div className="space-y-6">
+                      {ratings.length === 0 && (
+                        <div className="text-center py-8">
+                          <div className="text-gray-400 mb-4">
+                            <svg className="mx-auto h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                            </svg>
+                          </div>
+                          <p className="text-gray-600">No reviews yet for this doctor.</p>
+                        </div>
+                      )}
+                      {ratings.map((review) => (
+                        <div key={review.id} className="bg-gray-50 p-4 rounded-lg shadow-sm">
+                          <div className="flex items-center mb-2">
+                            <span className="font-semibold text-gray-800">
+                              {`Pacillian ${review.userId}` || 'Anonymous'}
+                            </span>
+                            <div className="ml-4">{renderStarRating(review.score)}</div>
+                            <span className="ml-auto text-sm text-gray-500">
+                              {new Date(review.createdAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                          <p className="text-gray-700">{review.comment}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
